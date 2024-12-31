@@ -43,7 +43,7 @@ fn main() {
       Startup,
       (size_window, spawn_camera, toggle_os_cursor).chain(),
     )
-    .add_systems(Update, close_on_esc)
+    .add_systems(Update, close.run_if(input_just_pressed(KeyCode::Escape)))
     .add_plugins(MischiefPlugin)
     .add_systems(Startup, spawn_cursors)
     .add_systems(
@@ -92,24 +92,25 @@ fn apply_mouse_events(
 
   for event in mouse_events.read() {
     for (mut transform, mouse_controlled) in mouse_controlled.iter_mut() {
-      if mouse_controlled.0 == Some(event.device) {
-        match event.event_data {
-          mischief::MischiefEventData::RelMotion { x, y } => {
-            let valid_positions =
-              Rect::from_corners(window_to_world(window.size()), window_to_world(Vec2::ZERO))
-                .inflate(-MOUSE_RADIUS);
-            let world_space_delta =
-              window_to_world(Vec2::new(x as f32, y as f32)) - window_to_world(Vec2::ZERO);
-            let next_pos = (transform.translation.xy() + world_space_delta)
-              .clamp(valid_positions.min, valid_positions.max);
+      if mouse_controlled.0 != Some(event.device) {
+        continue;
+      }
+      match event.event_data {
+        mischief::MischiefEventData::RelMotion { x, y } => {
+          let valid_positions =
+            Rect::from_corners(window_to_world(window.size()), window_to_world(Vec2::ZERO))
+              .inflate(-MOUSE_RADIUS);
+          let world_space_delta =
+            window_to_world(Vec2::new(x as f32, y as f32)) - window_to_world(Vec2::ZERO);
+          let next_pos = (transform.translation.xy() + world_space_delta)
+            .clamp(valid_positions.min, valid_positions.max);
 
-            transform.translation = next_pos.extend(0.0);
-          }
-          mischief::MischiefEventData::Disconnect => {
-            panic!("Mouse disconnected!");
-          }
-          _ => {}
+          transform.translation = next_pos.extend(0.0);
         }
+        mischief::MischiefEventData::Disconnect => {
+          panic!("Mouse disconnected!");
+        }
+        _ => {}
       }
     }
   }
@@ -143,8 +144,9 @@ fn size_window(mut windows: Query<&mut Window>) {
 fn toggle_os_cursor(mut windows: Query<&mut Window>) {
   let mut window = windows.single_mut();
   let window_center = Vec2::new(window.width() / 2.0, window.height() / 2.0);
-  let next_visible = !window.cursor_options.visible;
   window.set_cursor_position(Some(window_center));
+
+  let next_visible = !window.cursor_options.visible;
   window.cursor_options = bevy::window::CursorOptions {
     visible: next_visible,
     grab_mode: match next_visible {
@@ -155,19 +157,9 @@ fn toggle_os_cursor(mut windows: Query<&mut Window>) {
   };
 }
 
-fn close_on_esc(
-  mut commands: Commands,
-  focused_windows: Query<(Entity, &Window)>,
-  input: Res<ButtonInput<KeyCode>>,
-) {
-  for (window, focus) in focused_windows.iter() {
-    if !focus.focused {
-      continue;
-    }
-
-    if input.just_pressed(KeyCode::Escape) {
-      commands.entity(window).despawn();
-    }
+fn close(mut commands: Commands, windows: Query<Entity, With<Window>>) {
+  for window in windows.iter() {
+    commands.entity(window).despawn();
   }
 }
 
@@ -176,8 +168,6 @@ fn spawn_camera(mut commands: Commands) {
   commands.spawn((
     Camera2d,
     OrthographicProjection {
-      far: 1000.,
-      near: -1000.,
       scale: 1.0 / PIXELS_PER_METER,
       ..OrthographicProjection::default_2d()
     },
