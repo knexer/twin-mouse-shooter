@@ -4,15 +4,10 @@ use bevy::{
     prelude::*,
     window::WindowResolution,
 };
-use bevy_inspector_egui::quick::{StateInspectorPlugin, WorldInspectorPlugin};
-use link::LinkPlugin;
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
-mod link;
 mod mischief;
 mod util;
-
-// TODO: Create a main menu.
-// First stab at main menu: A separate screen and you just press spacebar to start.
 
 const PIXELS_PER_METER: f32 = 100.0;
 pub const BACKGROUND_COLOR: Color = Color::rgb(64.0 / 255.0, 67.0 / 255.0, 78.0 / 255.0);
@@ -20,7 +15,6 @@ pub const BACKGROUND_COLOR: Color = Color::rgb(64.0 / 255.0, 67.0 / 255.0, 78.0 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(LinkPlugin)
         .add_plugins(WorldInspectorPlugin::new().run_if(input_toggle_active(false, KeyCode::Grave)))
         .add_systems(
             Update,
@@ -30,39 +24,8 @@ fn main() {
             Startup,
             (size_window, spawn_camera, toggle_os_cursor).chain(),
         )
-        .add_state::<CurrentGame>()
-        .add_plugins(
-            StateInspectorPlugin::<CurrentGame>::default()
-                .run_if(input_toggle_active(false, KeyCode::Grave)),
-        )
-        .add_systems(
-            Update,
-            (bevy::window::close_on_esc, start_playing).run_if(in_state(CurrentGame::MainMenu)),
-        )
-        .add_systems(
-            Update,
-            exit_to_menu.run_if(not(in_state(CurrentGame::MainMenu))),
-        )
+        .add_systems(Update, bevy::window::close_on_esc)
         .run();
-}
-
-#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States, Reflect)]
-pub enum CurrentGame {
-    #[default]
-    MainMenu,
-    Link,
-}
-
-fn exit_to_menu(mut state: ResMut<NextState<CurrentGame>>, input: Res<Input<KeyCode>>) {
-    if input.just_pressed(KeyCode::Escape) {
-        state.set(CurrentGame::MainMenu);
-    }
-}
-
-fn start_playing(mut state: ResMut<NextState<CurrentGame>>, input: Res<Input<KeyCode>>) {
-    if input.just_pressed(KeyCode::Space) {
-        state.set(CurrentGame::Link);
-    }
 }
 
 fn size_window(mut windows: Query<&mut Window>) {
