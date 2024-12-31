@@ -7,7 +7,6 @@ use bevy::{
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 mod mischief;
-mod util;
 
 const PIXELS_PER_METER: f32 = 100.0;
 pub const BACKGROUND_COLOR: Color = Color::rgb(64.0 / 255.0, 67.0 / 255.0, 78.0 / 255.0);
