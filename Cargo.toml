@@ -1,13 +1,13 @@
 [package]
-name = "two-mouse-bevy-test"
+name = "twin-mouse-shooter"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bevy = { version = "0.11.3", features = ["dynamic_linking", "wav"] }
-bevy-inspector-egui = "0.20.0"
+bevy = { version = "0.15.0", features = ["dynamic_linking", "wav"] }
+bevy-inspector-egui = "0.28.0"
 libc = "0.2.149"
 rand = "0.8.5"
 
