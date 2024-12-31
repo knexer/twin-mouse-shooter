@@ -4,12 +4,13 @@ use bevy::{
     window::WindowResolution,
 };
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
-use mischief::{MischiefEvent, MischiefPlugin};
+use mischief::{MischiefEvent, MischiefPlugin, MischiefSession};
 
 mod mischief;
 
 const PIXELS_PER_METER: f32 = 100.0;
 pub const BACKGROUND_COLOR: Color = Color::srgb(64.0 / 255.0, 67.0 / 255.0, 78.0 / 255.0);
+const MOUSE_RADIUS: f32 = 0.4;
 
 // MVP features:
 // 2D, top down, fixed camera, real time game.
@@ -24,8 +25,8 @@ pub const BACKGROUND_COLOR: Color = Color::srgb(64.0 / 255.0, 67.0 / 255.0, 78.0
 
 // MVP tasks:
 // Set up project and import library for multiple mice. (done)
-// Control two entities with two mice, no speed limits. (done, but can't test without two mice)
-// Clamp the entities to the screen.
+// Control one entity with each discovered mouse, no speed limits. (done)
+// Clamp the entities to the screen. (done)
 // Figure out which mouse is left and which is right. Maybe ask player to move the mice to the sides of the screen?
 // Make the player entity move with the left mouse, and the reticle entity move with the right mouse.
 // Make the player entity move with speed/acceleration limits.
@@ -46,7 +47,7 @@ fn main() {
         )
         .add_systems(Update, close_on_esc)
         .add_plugins(MischiefPlugin)
-        .add_systems(Startup, spawn_entities)
+        .add_systems(Startup, spawn_cursors)
         .add_systems(
             Update,
             apply_mouse_events
@@ -59,36 +60,54 @@ fn main() {
 #[derive(Component)]
 struct MouseControlled(pub Option<u32>);
 
-fn spawn_entities(
+fn spawn_cursors(
     mut commands: Commands,
+    mischief_session: NonSend<MischiefSession>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    commands.spawn((
-        Transform::from_xyz(0.0, 0.0, 0.0),
-        MouseControlled(Some(0)),
-        Mesh2d::from(meshes.add(Annulus::new(0.2, 0.3))),
-        MeshMaterial2d(materials.add(Color::hsl(30., 0.95, 0.7))),
-    ));
-    commands.spawn((
-        Transform::from_xyz(0.0, 0.0, 0.0),
-        MouseControlled(Some(1)),
-        Mesh2d::from(meshes.add(RegularPolygon::new(0.4, 3))),
-        MeshMaterial2d(materials.add(Color::hsl(210., 0.95, 0.7))),
-    ));
+    for (i, mouse) in mischief_session.session.devices.iter().enumerate() {
+        commands.spawn((
+            Transform::default(),
+            MouseControlled(Some(mouse.id)),
+            Mesh2d::from(meshes.add(RegularPolygon::new(MOUSE_RADIUS, 3u32 + i as u32))),
+            MeshMaterial2d(materials.add(Color::hsl(
+                360. * i as f32 / mischief_session.session.devices.len() as f32,
+                0.95,
+                0.7,
+            ))),
+        ));
+    }
 }
 
 fn apply_mouse_events(
-    mut mouse_controlled: Query<(&mut Transform, &MouseControlled)>,
     mut mouse_events: EventReader<MischiefEvent>,
+    mut mouse_controlled: Query<(&mut Transform, &MouseControlled)>,
+    window_query: Query<&Window>,
+    camera_query: Query<(&GlobalTransform, &OrthographicProjection), With<Camera>>,
 ) {
+    let window = window_query.single();
+    let window_to_world = {
+        let (camera_transform, projection) = camera_query.single();
+        |position: Vec2| window_to_world(window, camera_transform, projection, position)
+    };
+
     for event in mouse_events.read() {
         for (mut transform, mouse_controlled) in mouse_controlled.iter_mut() {
             if mouse_controlled.0 == Some(event.device) {
                 match event.event_data {
                     mischief::MischiefEventData::RelMotion { x, y } => {
-                        transform.translation.x += x as f32 / PIXELS_PER_METER;
-                        transform.translation.y += y as f32 / PIXELS_PER_METER;
+                        let valid_positions = Rect::from_corners(
+                            window_to_world(window.size()),
+                            window_to_world(Vec2::ZERO),
+                        )
+                        .inflate(-MOUSE_RADIUS);
+                        let world_space_delta = window_to_world(Vec2::new(x as f32, y as f32))
+                            - window_to_world(Vec2::ZERO);
+                        let next_pos = (transform.translation.xy() + world_space_delta)
+                            .clamp(valid_positions.min, valid_positions.max);
+
+                        transform.translation = next_pos.extend(0.0);
                     }
                     mischief::MischiefEventData::Disconnect => {
                         panic!("Mouse disconnected!");
@@ -98,6 +117,23 @@ fn apply_mouse_events(
             }
         }
     }
+}
+
+fn window_to_world(
+    window: &Window,
+    camera_transform: &GlobalTransform,
+    projection: &OrthographicProjection,
+    position: Vec2,
+) -> Vec2 {
+    let center = camera_transform.translation().truncate();
+    let half_width = (window.width() / 2.0) * projection.scale;
+    let half_height = (window.height() / 2.0) * projection.scale;
+    let left = center.x - half_width;
+    let bottom = center.y - half_height;
+    Vec2::new(
+        left + position.x * projection.scale,
+        bottom + (window.height() - position.y) * projection.scale,
+    )
 }
 
 fn size_window(mut windows: Query<&mut Window>) {
