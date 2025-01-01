@@ -9,7 +9,7 @@ use crate::{
 
 // Needs some wrapping up / polish:
 // - spawn some boxes for the mouse assignment targets (done)
-// - despawn each box when the corresponding cursor is assigned
+// - despawn each box when the corresponding cursor is assigned (done)
 // - show some intro text / instructions (in each box, and in the middle of the screen)
 // - change states when we have both mice assigned
 // - make the text and leftover cursors disappear when we change states
@@ -23,7 +23,7 @@ impl Plugin for IntroPlugin {
       .add_systems(OnEnter(AppState::Intro), (spawn_cursors, spawn_boxes))
       .add_systems(
         Update,
-        (assign_cursor_hands, color_cursors)
+        (assign_cursor_hands, (color_cursors, despawn_boxes))
           .chain()
           .after(apply_mouse_events)
           .run_if(in_state(AppState::Intro)),
@@ -148,6 +148,7 @@ fn spawn_boxes(
     Transform::from_translation(left_center.extend(0.0)),
     Mesh2d::from(box_handle.clone()),
     MeshMaterial2d(materials.add(Color::hsl(30., 0.95, 0.7))),
+    DespawnOnHandAssignment(Hand::Left),
   ));
 
   let right_center = window_to_world(Vec2::new(window.width() * 7.0 / 8.0, window.height() / 2.0))
@@ -156,6 +157,7 @@ fn spawn_boxes(
     Transform::from_translation(right_center.extend(0.0)),
     Mesh2d::from(box_handle),
     MeshMaterial2d(materials.add(Color::hsl(150., 0.95, 0.7))),
+    DespawnOnHandAssignment(Hand::Right),
   ));
 }
 
@@ -261,5 +263,20 @@ fn color_cursors(
       }
     };
     materials.insert(material, new_color.into());
+  }
+}
+
+#[derive(Component)]
+struct DespawnOnHandAssignment(Hand);
+
+fn despawn_boxes(
+  mut commands: Commands,
+  boxes: Query<(Entity, &DespawnOnHandAssignment)>,
+  hands: Query<&MouseControlled>,
+) {
+  for (entity, DespawnOnHandAssignment(hand)) in boxes.iter() {
+    if hands.iter().any(|mc| mc.hand == Some(hand.clone())) {
+      commands.entity(entity).despawn();
+    }
   }
 }
