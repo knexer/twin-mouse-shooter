@@ -8,7 +8,7 @@ use crate::{
 };
 
 // Needs some wrapping up / polish:
-// - spawn some boxes for the mouse assignment targets (done but could be prettier boxes)
+// - spawn some boxes for the mouse assignment targets (done)
 // - despawn each box when the corresponding cursor is assigned
 // - show some intro text / instructions (in each box, and in the middle of the screen)
 // - change states when we have both mice assigned
@@ -32,6 +32,8 @@ impl Plugin for IntroPlugin {
 }
 
 fn make_box_mesh(outer_size: Vec2, border_thickness: f32, outer_corner_radius: f32) -> Mesh {
+  assert!(outer_corner_radius > border_thickness);
+
   let left_edge = -outer_size.x / 2.0;
   let right_edge = outer_size.x / 2.0;
   let top_edge = outer_size.y / 2.0;
@@ -55,40 +57,62 @@ fn make_box_mesh(outer_size: Vec2, border_thickness: f32, outer_corner_radius: f
     Vec2::new(left_edge, top_curve),
     Vec2::new(left_curve, top_curve),
     8,
-    WindDirection::Clockwise,
+    WindDirection::CounterClockwise,
   );
   path.line_to(Vec2::new(left_edge, bottom_curve));
   path.arc_to(
     Vec2::new(left_curve, bottom_edge),
     Vec2::new(left_curve, bottom_curve),
     8,
-    WindDirection::Clockwise,
+    WindDirection::CounterClockwise,
   );
   path.line_to(Vec2::new(right_curve, bottom_edge));
   path.arc_to(
     Vec2::new(right_edge, bottom_curve),
     Vec2::new(right_curve, bottom_curve),
     8,
-    WindDirection::Clockwise,
+    WindDirection::CounterClockwise,
   );
   path.line_to(Vec2::new(right_edge, top_curve));
   path.arc_to(
     Vec2::new(right_curve, top_edge),
     Vec2::new(right_curve, top_curve),
     8,
-    WindDirection::Clockwise,
+    WindDirection::CounterClockwise,
   );
   path.line_to(Vec2::new(left_curve + 0.0001, top_edge));
 
-  // Now the inner rectangle (without rounded corners)
+  // Now the inner rectangle (again with rounded corners)
   // And we go clockwise from the top left
-  // TODO round the inner corners as well, maybe. Might not be that hard.
-  // BUT the corner radius must be larger than the border thickness (I think maybe?)
-  path.line_to(Vec2::new(inside_left_edge + 0.0001, inside_top_edge));
-  path.line_to(Vec2::new(inside_right_edge, inside_top_edge));
-  path.line_to(Vec2::new(inside_right_edge, inside_bottom_edge));
-  path.line_to(Vec2::new(inside_left_edge, inside_bottom_edge));
-  path.line_to(Vec2::new(inside_left_edge, inside_top_edge));
+  path.line_to(Vec2::new(left_curve + 0.0001, inside_top_edge));
+  path.line_to(Vec2::new(right_curve, inside_top_edge));
+  path.arc_to(
+    Vec2::new(inside_right_edge, top_curve),
+    Vec2::new(right_curve, top_curve),
+    8,
+    WindDirection::Clockwise,
+  );
+  path.line_to(Vec2::new(inside_right_edge, bottom_curve));
+  path.arc_to(
+    Vec2::new(right_curve, inside_bottom_edge),
+    Vec2::new(right_curve, bottom_curve),
+    8,
+    WindDirection::Clockwise,
+  );
+  path.line_to(Vec2::new(left_curve, inside_bottom_edge));
+  path.arc_to(
+    Vec2::new(inside_left_edge, bottom_curve),
+    Vec2::new(left_curve, bottom_curve),
+    8,
+    WindDirection::Clockwise,
+  );
+  path.line_to(Vec2::new(inside_left_edge, top_curve));
+  path.arc_to(
+    Vec2::new(left_curve, inside_top_edge),
+    Vec2::new(left_curve, top_curve),
+    8,
+    WindDirection::Clockwise,
+  );
   path.close();
 
   path.build_triangle_mesh()
@@ -116,7 +140,7 @@ fn spawn_boxes(
     world_size.x / 4.0 - inset_world,
     world_size.y - 2. * inset_world,
   );
-  let box_handle = meshes.add(make_box_mesh(rect_size, 0.2, 0.2));
+  let box_handle = meshes.add(make_box_mesh(rect_size, 0.05, 0.5));
 
   let left_center = window_to_world(Vec2::new(window.width() / 8.0, window.height() / 2.0))
     + Vec2::new(inset_world / 2., 0.0);

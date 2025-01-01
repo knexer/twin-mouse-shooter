@@ -39,14 +39,13 @@ impl Path {
     let radius = (start_pos - arc_center).length();
     let start_angle = f32::atan2(start_pos.y - arc_center.y, start_pos.x - arc_center.x);
     let end_angle = f32::atan2(end_pos.y - arc_center.y, end_pos.x - arc_center.x);
-    let unclamped_sweep_angle = match direction {
-      WindDirection::Clockwise => end_angle - start_angle,
-      WindDirection::CounterClockwise => start_angle - end_angle,
-    };
+    let unclamped_sweep_angle = end_angle - start_angle;
     let sweep_angle = match direction {
-      WindDirection::Clockwise => unclamped_sweep_angle.rem_euclid(std::f32::consts::PI * 2.0),
-      WindDirection::CounterClockwise => {
+      WindDirection::Clockwise => {
         unclamped_sweep_angle.rem_euclid(std::f32::consts::PI * 2.0) - std::f32::consts::PI * 2.0
+      }
+      WindDirection::CounterClockwise => {
+        unclamped_sweep_angle.rem_euclid(std::f32::consts::PI * 2.0)
       }
     };
     let angle_step = sweep_angle / num_segments as f32;
