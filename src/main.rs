@@ -5,6 +5,7 @@ use window_setup::WindowSetupPlugin;
 
 mod intro;
 mod mischief;
+mod path;
 mod window_setup;
 
 const MOUSE_RADIUS: f32 = 0.4;
@@ -37,7 +38,7 @@ fn main() {
     .add_plugins(WindowSetupPlugin)
     .add_plugins(MischiefPlugin)
     .add_plugins(IntroPlugin)
-    .insert_state(AppState::Intro)
+    .insert_state(AppState::Loading)
     .add_systems(
       Update,
       apply_mouse_events
@@ -49,6 +50,7 @@ fn main() {
 
 #[derive(States, Debug, Clone, PartialEq, Eq, Hash)]
 enum AppState {
+  Loading,
   Intro,
   Playing,
 }

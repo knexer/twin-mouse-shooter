@@ -1,24 +1,26 @@
 use bevy::prelude::*;
 
 use crate::{
-  apply_mouse_events, mischief::MischiefSession, window_to_world, AppState, Hand, MouseControlled,
-  MOUSE_RADIUS,
+  apply_mouse_events,
+  mischief::MischiefSession,
+  path::{Path, WindDirection},
+  window_to_world, AppState, Hand, MouseControlled, MOUSE_RADIUS,
 };
 
 // Needs some wrapping up / polish:
-// - spawn some boxes for the mouse assignment targets
+// - spawn some boxes for the mouse assignment targets (done but could be prettier boxes)
 // - despawn each box when the corresponding cursor is assigned
 // - show some intro text / instructions (in each box, and in the middle of the screen)
 // - change states when we have both mice assigned
 // - make the text and leftover cursors disappear when we change states
-// - spawn the cursors with some vertical spread instead of all on top of each other
+// - spawn the cursors with some vertical spread instead of all on top of each other (done)
 
 pub struct IntroPlugin;
 
 impl Plugin for IntroPlugin {
   fn build(&self, app: &mut App) {
     app
-      .add_systems(OnEnter(AppState::Intro), spawn_cursors)
+      .add_systems(OnEnter(AppState::Intro), (spawn_cursors, spawn_boxes))
       .add_systems(
         Update,
         (assign_cursor_hands, color_cursors)
@@ -29,6 +31,110 @@ impl Plugin for IntroPlugin {
   }
 }
 
+fn make_box_mesh(outer_size: Vec2, border_thickness: f32, outer_corner_radius: f32) -> Mesh {
+  let left_edge = -outer_size.x / 2.0;
+  let right_edge = outer_size.x / 2.0;
+  let top_edge = outer_size.y / 2.0;
+  let bottom_edge = -outer_size.y / 2.0;
+
+  let left_curve = left_edge + outer_corner_radius;
+  let right_curve = right_edge - outer_corner_radius;
+  let top_curve = top_edge - outer_corner_radius;
+  let bottom_curve = bottom_edge + outer_corner_radius;
+
+  let inside_left_edge = left_edge + border_thickness;
+  let inside_right_edge = right_edge - border_thickness;
+  let inside_top_edge = top_edge - border_thickness;
+  let inside_bottom_edge = bottom_edge + border_thickness;
+
+  let mut path: Path = Path::new();
+  // Draw the outer rectangle (with rounded corners)
+  // Going counterclockwise from the top left before the bevel
+  path.move_to(Vec2::new(left_curve, top_edge));
+  path.arc_to(
+    Vec2::new(left_edge, top_curve),
+    Vec2::new(left_curve, top_curve),
+    8,
+    WindDirection::Clockwise,
+  );
+  path.line_to(Vec2::new(left_edge, bottom_curve));
+  path.arc_to(
+    Vec2::new(left_curve, bottom_edge),
+    Vec2::new(left_curve, bottom_curve),
+    8,
+    WindDirection::Clockwise,
+  );
+  path.line_to(Vec2::new(right_curve, bottom_edge));
+  path.arc_to(
+    Vec2::new(right_edge, bottom_curve),
+    Vec2::new(right_curve, bottom_curve),
+    8,
+    WindDirection::Clockwise,
+  );
+  path.line_to(Vec2::new(right_edge, top_curve));
+  path.arc_to(
+    Vec2::new(right_curve, top_edge),
+    Vec2::new(right_curve, top_curve),
+    8,
+    WindDirection::Clockwise,
+  );
+  path.line_to(Vec2::new(left_curve + 0.0001, top_edge));
+
+  // Now the inner rectangle (without rounded corners)
+  // And we go clockwise from the top left
+  // TODO round the inner corners as well, maybe. Might not be that hard.
+  // BUT the corner radius must be larger than the border thickness (I think maybe?)
+  path.line_to(Vec2::new(inside_left_edge + 0.0001, inside_top_edge));
+  path.line_to(Vec2::new(inside_right_edge, inside_top_edge));
+  path.line_to(Vec2::new(inside_right_edge, inside_bottom_edge));
+  path.line_to(Vec2::new(inside_left_edge, inside_bottom_edge));
+  path.line_to(Vec2::new(inside_left_edge, inside_top_edge));
+  path.close();
+
+  path.build_triangle_mesh()
+}
+
+fn spawn_boxes(
+  mut commands: Commands,
+  mut meshes: ResMut<Assets<Mesh>>,
+  mut materials: ResMut<Assets<ColorMaterial>>,
+  window: Query<&Window>,
+  camera_query: Query<(&GlobalTransform, &OrthographicProjection), With<Camera>>,
+) {
+  let window = window.single();
+  let window_to_world = {
+    let (camera_transform, projection) = camera_query.single();
+    |position: Vec2| window_to_world(window, camera_transform, projection, position)
+  };
+
+  let world_size = (window_to_world(Vec2::new(window.width(), window.height()))
+    - window_to_world(Vec2::ZERO))
+  .abs();
+
+  let inset_world = 0.5;
+  let rect_size = Vec2::new(
+    world_size.x / 4.0 - inset_world,
+    world_size.y - 2. * inset_world,
+  );
+  let box_handle = meshes.add(make_box_mesh(rect_size, 0.2, 0.2));
+
+  let left_center = window_to_world(Vec2::new(window.width() / 8.0, window.height() / 2.0))
+    + Vec2::new(inset_world / 2., 0.0);
+  commands.spawn((
+    Transform::from_translation(left_center.extend(0.0)),
+    Mesh2d::from(box_handle.clone()),
+    MeshMaterial2d(materials.add(Color::hsl(30., 0.95, 0.7))),
+  ));
+
+  let right_center = window_to_world(Vec2::new(window.width() * 7.0 / 8.0, window.height() / 2.0))
+    - Vec2::new(inset_world / 2., 0.0);
+  commands.spawn((
+    Transform::from_translation(right_center.extend(0.0)),
+    Mesh2d::from(box_handle),
+    MeshMaterial2d(materials.add(Color::hsl(150., 0.95, 0.7))),
+  ));
+}
+
 fn spawn_cursors(
   mut commands: Commands,
   mischief_session: NonSend<MischiefSession>,
@@ -37,7 +143,11 @@ fn spawn_cursors(
 ) {
   for (i, mouse) in mischief_session.session.devices.iter().enumerate() {
     commands.spawn((
-      Transform::default(),
+      Transform::from_translation(Vec3::new(
+        0.0,
+        -4. * i as f32 / mischief_session.session.devices.len() as f32,
+        0.0,
+      )),
       MouseControlled {
         id: mouse.id,
         hand: None,

@@ -5,6 +5,8 @@ use bevy::{
 };
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
+use crate::AppState;
+
 pub struct WindowSetupPlugin;
 
 const PIXELS_PER_METER: f32 = 100.0;
@@ -18,8 +20,8 @@ impl Plugin for WindowSetupPlugin {
         toggle_os_cursor.run_if(input_just_pressed(KeyCode::Backquote)),
       )
       .add_systems(
-        Startup,
-        (size_window, spawn_camera, toggle_os_cursor).chain(),
+        OnEnter(AppState::Loading),
+        (size_window, spawn_camera, toggle_os_cursor, exit_loading).chain(),
       )
       .add_systems(Update, close.run_if(input_just_pressed(KeyCode::Escape)))
       .add_plugins(
@@ -34,6 +36,17 @@ fn size_window(mut windows: Query<&mut Window>) {
   window.resolution = WindowResolution::new(1600.0 * scale_factor, 900.0 * scale_factor)
     .with_scale_factor_override(scale_factor as f32);
   window.position.center(MonitorSelection::Current);
+}
+
+fn spawn_camera(mut commands: Commands) {
+  commands.insert_resource(ClearColor(BACKGROUND_COLOR));
+  commands.spawn((
+    Camera2d,
+    OrthographicProjection {
+      scale: 1.0 / PIXELS_PER_METER,
+      ..OrthographicProjection::default_2d()
+    },
+  ));
 }
 
 fn toggle_os_cursor(mut windows: Query<&mut Window>) {
@@ -52,19 +65,12 @@ fn toggle_os_cursor(mut windows: Query<&mut Window>) {
   };
 }
 
+fn exit_loading(mut state: ResMut<NextState<AppState>>) {
+  state.set(AppState::Intro);
+}
+
 fn close(mut commands: Commands, windows: Query<Entity, With<Window>>) {
   for window in windows.iter() {
     commands.entity(window).despawn();
   }
-}
-
-fn spawn_camera(mut commands: Commands) {
-  commands.insert_resource(ClearColor(BACKGROUND_COLOR));
-  commands.spawn((
-    Camera2d,
-    OrthographicProjection {
-      scale: 1.0 / PIXELS_PER_METER,
-      ..OrthographicProjection::default_2d()
-    },
-  ));
 }
