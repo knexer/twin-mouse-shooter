@@ -11,8 +11,8 @@ use crate::{
 // - spawn some boxes for the mouse assignment targets (done)
 // - despawn each box when the corresponding cursor is assigned (done)
 // - show some intro text / instructions (in each box, and in the middle of the screen)
-// - change states when we have both mice assigned
-// - make the text and leftover cursors disappear when we change states
+// - change states when we have both mice assigned (done)
+// - make the text and leftover cursors disappear when we change states (done, for cursors)
 // - spawn the cursors with some vertical spread instead of all on top of each other (done)
 
 pub struct IntroPlugin;
@@ -23,11 +23,12 @@ impl Plugin for IntroPlugin {
       .add_systems(OnEnter(AppState::Intro), (spawn_cursors, spawn_boxes))
       .add_systems(
         Update,
-        (assign_cursor_hands, (color_cursors, despawn_boxes))
+        (assign_cursor_hands, (color_cursors, progress_intro))
           .chain()
           .after(apply_mouse_events)
           .run_if(in_state(AppState::Intro)),
-      );
+      )
+      .add_systems(OnExit(AppState::Intro), cleanup_intro);
   }
 }
 
@@ -147,7 +148,7 @@ fn spawn_boxes(
   commands.spawn((
     Transform::from_translation(left_center.extend(0.0)),
     Mesh2d::from(box_handle.clone()),
-    MeshMaterial2d(materials.add(Color::hsl(30., 0.95, 0.7))),
+    MeshMaterial2d(materials.add(Color::hsl(180., 0.95, 0.7))),
     DespawnOnHandAssignment(Hand::Left),
   ));
 
@@ -156,7 +157,7 @@ fn spawn_boxes(
   commands.spawn((
     Transform::from_translation(right_center.extend(0.0)),
     Mesh2d::from(box_handle),
-    MeshMaterial2d(materials.add(Color::hsl(150., 0.95, 0.7))),
+    MeshMaterial2d(materials.add(Color::hsl(300., 0.95, 0.7))),
     DespawnOnHandAssignment(Hand::Right),
   ));
 }
@@ -238,10 +239,10 @@ fn color_cursors(
     .iter()
     .any(|(_, mc, _)| mc.hand == Some(Hand::Right));
 
-  let left_color = Color::hsl(30., 0.95, 0.7);
-  let left_base_none_color = Color::hsl(30., 0.0, 0.7);
-  let right_color = Color::hsl(150., 0.95, 0.7);
-  let right_base_none_color = Color::hsl(150., 0.0, 0.7);
+  let left_color = Color::hsl(180., 0.95, 0.7);
+  let left_base_none_color = Color::hsl(240., 0.95, 0.7);
+  let right_color = Color::hsl(300., 0.95, 0.7);
+  let right_base_none_color = Color::hsl(240., 0.95, 0.7);
   for (transform, mouse_controlled, material) in mouse_controlled.iter() {
     let new_color = match mouse_controlled.hand {
       Some(Hand::Left) => left_color,
@@ -269,14 +270,27 @@ fn color_cursors(
 #[derive(Component)]
 struct DespawnOnHandAssignment(Hand);
 
-fn despawn_boxes(
+fn progress_intro(
   mut commands: Commands,
   boxes: Query<(Entity, &DespawnOnHandAssignment)>,
   hands: Query<&MouseControlled>,
+  mut exit_intro: ResMut<NextState<AppState>>,
 ) {
+  let left_assigned = hands.iter().any(|mc| mc.hand == Some(Hand::Left));
+  let right_assigned = hands.iter().any(|mc| mc.hand == Some(Hand::Right));
   for (entity, DespawnOnHandAssignment(hand)) in boxes.iter() {
-    if hands.iter().any(|mc| mc.hand == Some(hand.clone())) {
+    if (hand == &Hand::Left && left_assigned) || (hand == &Hand::Right && right_assigned) {
       commands.entity(entity).despawn();
     }
+  }
+
+  if left_assigned && right_assigned {
+    exit_intro.set(AppState::Playing);
+  }
+}
+
+fn cleanup_intro(mut commands: Commands, cursors: Query<(Entity, &MouseControlled)>) {
+  for (id, _) in cursors.iter().filter(|(_, mc)| mc.hand.is_none()) {
+    commands.entity(id).despawn();
   }
 }
