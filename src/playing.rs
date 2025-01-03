@@ -7,10 +7,10 @@ use crate::{
 };
 
 // MVP tasks:
-// Spawn enemies
-// Player shoots
+// Spawn enemies (done)
+// Player shoots (done)
 // Enemies damage the player
-// Player damages enemies
+// Player damages enemies (part done, needs collision detection and partial damage)
 
 pub struct PlayingPlugin;
 
@@ -21,8 +21,15 @@ impl Plugin for PlayingPlugin {
         1.0,
         TimerMode::Repeating,
       )))
+      .insert_resource(PlayerShootTimer(Timer::from_seconds(
+        0.1,
+        TimerMode::Repeating,
+      )))
       .add_systems(OnEnter(AppState::Playing), init_cursor_roles)
-      .add_systems(Update, spawn_enemy.run_if(in_state(AppState::Playing)));
+      .add_systems(
+        Update,
+        (spawn_enemy, shoot).run_if(in_state(AppState::Playing)),
+      );
   }
 }
 
@@ -100,4 +107,28 @@ fn spawn_enemy(
     Mesh2d::from(meshes.add(RegularPolygon::new(0.25, 3))),
     MeshMaterial2d(materials.add(Color::hsl(0., 0.95, 0.7))),
   ));
+}
+
+#[derive(Resource)]
+struct PlayerShootTimer(Timer);
+
+fn shoot(
+  mut commands: Commands,
+  player: Query<&Transform, With<Reticle>>,
+  enemies: Query<(Entity, &Transform), With<Enemy>>,
+  time: Res<Time>,
+  mut timer: ResMut<PlayerShootTimer>,
+) {
+  if !timer.0.tick(time.delta()).just_finished() {
+    return;
+  }
+
+  let player_position = player.single().translation;
+
+  for (enemy_entity, enemy_transform) in enemies.iter() {
+    // TODO actually check for mesh intersection
+    if (enemy_transform.translation.xy() - player_position.xy()).length() < 0.5 {
+      commands.entity(enemy_entity).despawn();
+    }
+  }
 }
