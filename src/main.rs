@@ -1,14 +1,19 @@
 use bevy::{input::common_conditions::input_toggle_active, prelude::*};
 use intro::IntroPlugin;
 use mischief::{MischiefEvent, MischiefPlugin};
+use playing::PlayingPlugin;
 use window_setup::WindowSetupPlugin;
 
 mod intro;
 mod mischief;
 mod path;
+mod playing;
 mod window_setup;
 
 const MOUSE_RADIUS: f32 = 0.4;
+const PLAYER_COLOR: Color = Color::hsl(180., 0.95, 0.7);
+const UNASSIGNED_COLOR: Color = Color::hsl(240., 0.95, 0.7);
+const RETICLE_COLOR: Color = Color::hsl(300., 0.95, 0.7);
 
 // MVP features:
 // 2D, top down, fixed camera, real time game.
@@ -21,23 +26,13 @@ const MOUSE_RADIUS: f32 = 0.4;
 // Enemies spawn and attack the player. The player can take damage and/or die. It's a bullet hell kind of thing.
 // The player shoots at their reticle's location automatically, and can damage and kill the enemies.
 
-// MVP tasks:
-// Set up project and import library for multiple mice. (done)
-// Control one entity with each discovered mouse, no speed limits. (done)
-// Clamp the entities to the screen. (done)
-// Figure out which mouse is left and which is right. (done, needs polish)
-// Make the player entity move with the left mouse, and the reticle entity move with the right mouse.
-// Make the player entity move with speed/acceleration limits.
-
-// Next up:
-// Differentiate the player and reticle entities once we're in playing state.
-
 fn main() {
   App::new()
     .add_plugins(DefaultPlugins)
     .add_plugins(WindowSetupPlugin)
     .add_plugins(MischiefPlugin)
     .add_plugins(IntroPlugin)
+    .add_plugins(PlayingPlugin)
     .insert_state(AppState::Loading)
     .add_systems(
       Update,

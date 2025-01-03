@@ -4,16 +4,9 @@ use crate::{
   apply_mouse_events,
   mischief::MischiefSession,
   path::{Path, WindDirection},
-  window_to_world, AppState, Hand, MouseControlled, MOUSE_RADIUS,
+  window_to_world, AppState, Hand, MouseControlled, MOUSE_RADIUS, PLAYER_COLOR, RETICLE_COLOR,
+  UNASSIGNED_COLOR,
 };
-
-// Needs some wrapping up / polish:
-// - spawn some boxes for the mouse assignment targets (done)
-// - despawn each box when the corresponding cursor is assigned (done)
-// - show some intro text / instructions (in each box, and in the middle of the screen)
-// - change states when we have both mice assigned (done)
-// - make the text and leftover cursors disappear when we change states (done, for cursors)
-// - spawn the cursors with some vertical spread instead of all on top of each other (done)
 
 pub struct IntroPlugin;
 
@@ -148,7 +141,7 @@ fn spawn_boxes(
   commands.spawn((
     Transform::from_translation(left_center.extend(0.0)),
     Mesh2d::from(box_handle.clone()),
-    MeshMaterial2d(materials.add(Color::hsl(180., 0.95, 0.7))),
+    MeshMaterial2d(materials.add(PLAYER_COLOR)),
     DespawnOnHandAssignment(Hand::Left),
   ));
 
@@ -157,7 +150,7 @@ fn spawn_boxes(
   commands.spawn((
     Transform::from_translation(right_center.extend(0.0)),
     Mesh2d::from(box_handle),
-    MeshMaterial2d(materials.add(Color::hsl(300., 0.95, 0.7))),
+    MeshMaterial2d(materials.add(RETICLE_COLOR)),
     DespawnOnHandAssignment(Hand::Right),
   ));
 }
@@ -239,14 +232,10 @@ fn color_cursors(
     .iter()
     .any(|(_, mc, _)| mc.hand == Some(Hand::Right));
 
-  let left_color = Color::hsl(180., 0.95, 0.7);
-  let left_base_none_color = Color::hsl(240., 0.95, 0.7);
-  let right_color = Color::hsl(300., 0.95, 0.7);
-  let right_base_none_color = Color::hsl(240., 0.95, 0.7);
   for (transform, mouse_controlled, material) in mouse_controlled.iter() {
     let new_color = match mouse_controlled.hand {
-      Some(Hand::Left) => left_color,
-      Some(Hand::Right) => right_color,
+      Some(Hand::Left) => PLAYER_COLOR,
+      Some(Hand::Right) => RETICLE_COLOR,
       None => {
         let left_edge = window_to_world(Vec2::new(window.width() / 4.0, 0.0)).x;
         let right_edge = window_to_world(Vec2::new(window.width() * 3.0 / 4.0, 0.0)).x;
@@ -255,11 +244,11 @@ fn color_cursors(
         let proportion_to_left = -proportion_to_right;
 
         if proportion_to_left > 0. && needs_left {
-          left_base_none_color.mix(&left_color, proportion_to_left)
+          UNASSIGNED_COLOR.mix(&PLAYER_COLOR, proportion_to_left)
         } else if proportion_to_right > 0. && needs_right {
-          right_base_none_color.mix(&right_color, proportion_to_right)
+          UNASSIGNED_COLOR.mix(&RETICLE_COLOR, proportion_to_right)
         } else {
-          left_base_none_color
+          UNASSIGNED_COLOR
         }
       }
     };
@@ -290,7 +279,17 @@ fn progress_intro(
 }
 
 fn cleanup_intro(mut commands: Commands, cursors: Query<(Entity, &MouseControlled)>) {
-  for (id, _) in cursors.iter().filter(|(_, mc)| mc.hand.is_none()) {
-    commands.entity(id).despawn();
+  for (id, mc) in cursors.iter() {
+    match mc.hand {
+      Some(_) => {
+        commands
+          .entity(id)
+          .remove::<Mesh2d>()
+          .remove::<MeshMaterial2d<ColorMaterial>>();
+      }
+      None => {
+        commands.entity(id).despawn();
+      }
+    }
   }
 }
