@@ -126,8 +126,8 @@ fn spawn_boxes(
   );
   let box_handle = meshes.add(make_box_mesh(rect_size, 0.05, 0.5));
 
-  let left_center = Vec2::new(play_area.size_world.x / 8.0, play_area.size_world.y / 2.0)
-    + Vec2::new(inset_world / 2., 0.0);
+  let left_center =
+    Vec2::new(play_area.size_world.x * -3. / 8., 0.) + Vec2::new(inset_world / 2., 0.0);
   commands.spawn((
     Transform::from_translation(left_center.extend(0.0)),
     Mesh2d::from(box_handle.clone()),
@@ -135,10 +135,8 @@ fn spawn_boxes(
     DespawnOnHandAssignment(Hand::Left),
   ));
 
-  let right_center = Vec2::new(
-    play_area.size_world.x * 7. / 8.,
-    play_area.size_world.y / 2.0,
-  ) - Vec2::new(inset_world / 2., 0.0);
+  let right_center =
+    Vec2::new(play_area.size_world.x * 3. / 8., 0.) - Vec2::new(inset_world / 2., 0.0);
   commands.spawn((
     Transform::from_translation(right_center.extend(0.0)),
     Mesh2d::from(box_handle),
@@ -187,9 +185,9 @@ fn assign_cursor_hands(
       continue;
     }
 
-    if needs_left && transform.translation.x < play_area.size_world.x / 4. {
+    if needs_left && transform.translation.x < play_area.size_world.x * -1. / 4. {
       mouse_controlled.hand = Some(Hand::Left);
-    } else if needs_right && transform.translation.x > play_area.size_world.x * 3. / 4. {
+    } else if needs_right && transform.translation.x > play_area.size_world.x * 1. / 4. {
       mouse_controlled.hand = Some(Hand::Right);
     }
   }
