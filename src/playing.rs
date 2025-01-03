@@ -1,7 +1,9 @@
 use bevy::prelude::*;
+use rand::Rng;
 
 use crate::{
-  AppState, Hand, MouseControlConfig, MouseControlled, MOUSE_RADIUS, PLAYER_COLOR, RETICLE_COLOR,
+  window_setup::PlayArea, AppState, Hand, MouseControlConfig, MouseControlled, MOUSE_RADIUS,
+  PLAYER_COLOR, RETICLE_COLOR,
 };
 
 // MVP tasks:
@@ -74,23 +76,26 @@ fn spawn_enemy(
   player: Query<&Transform, With<Player>>,
   time: Res<Time>,
   mut timer: ResMut<EnemySpawnTimer>,
+  play_area: Res<PlayArea>,
 ) {
   if !timer.0.tick(time.delta()).just_finished() {
     return;
   }
 
   let player_position = player.single().translation;
+  let min_distance = 2.5;
 
-  // TODO spawn at a random location not too near the player
-  let enemy_position = Vec3::new(
-    player_position.x + 1.0,
-    player_position.y,
-    player_position.z,
-  );
+  let mut rng = rand::thread_rng();
+  let enemy_position = std::iter::from_fn(|| {
+    Some(rng.gen::<Vec2>() * play_area.size_world - play_area.size_world / 2.0)
+  })
+  .filter(|&enemy_position| (enemy_position - player_position.truncate()).length() >= min_distance)
+  .next()
+  .unwrap();
 
   commands.spawn((
     Enemy,
-    Transform::from_translation(enemy_position),
+    Transform::from_translation(enemy_position.extend(0.0)),
     GlobalTransform::default(),
     Mesh2d::from(meshes.add(RegularPolygon::new(0.25, 3))),
     MeshMaterial2d(materials.add(Color::hsl(0., 0.95, 0.7))),
