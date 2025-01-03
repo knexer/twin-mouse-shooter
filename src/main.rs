@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use bevy::{input::common_conditions::input_toggle_active, prelude::*};
 use intro::IntroPlugin;
 use mischief::{MischiefEvent, MischiefPlugin};
-use playing::PlayingPlugin;
+use playing::{Player, PlayingPlugin};
 use window_setup::WindowSetupPlugin;
 
 mod intro;
@@ -34,9 +36,11 @@ fn main() {
     .add_plugins(IntroPlugin)
     .add_plugins(PlayingPlugin)
     .insert_state(AppState::Loading)
+    .add_event::<CursorMoveEvent>()
     .add_systems(
       Update,
-      apply_mouse_events
+      (aggregate_mouse_events, apply_mouse_events)
+        .chain()
         .after(mischief::poll_events)
         .run_if(input_toggle_active(true, KeyCode::Backquote)),
     )
@@ -62,9 +66,58 @@ struct MouseControlled {
   pub hand: Option<Hand>,
 }
 
-fn apply_mouse_events(
+#[derive(Event, Debug)]
+pub struct CursorMoveEvent {
+  pub device: u32,
+  pub delta_world: Vec2,
+}
+
+fn aggregate_mouse_events(
   mut mouse_events: EventReader<MischiefEvent>,
-  mut mouse_controlled: Query<(&mut Transform, &MouseControlled)>,
+  mut out_events: EventWriter<CursorMoveEvent>,
+  window_query: Query<&Window>,
+  camera_query: Query<(&GlobalTransform, &OrthographicProjection), With<Camera>>,
+) {
+  let window_to_world = {
+    let window = window_query.single();
+    let (camera_transform, projection) = camera_query.single();
+    |position: Vec2| window_to_world(window, camera_transform, projection, position)
+  };
+
+  mouse_events
+    .read()
+    .map(|event| {
+      let world_delta = match event.event_data {
+        mischief::MischiefEventData::RelMotion { x, y } => {
+          window_to_world(Vec2::new(x as f32, y as f32)) - window_to_world(Vec2::ZERO)
+        }
+        mischief::MischiefEventData::Disconnect => {
+          panic!("Mouse disconnected!");
+        }
+        _ => Vec2::ZERO,
+      };
+      (event.device, world_delta)
+    })
+    .fold(HashMap::new(), |mut map, (id, world_delta)| {
+      map
+        .entry(id)
+        .and_modify(|delta| *delta += world_delta)
+        .or_insert(world_delta);
+      map
+    })
+    .iter()
+    .for_each(|(device, delta)| {
+      out_events.send(CursorMoveEvent {
+        device: *device,
+        delta_world: *delta,
+      });
+    });
+}
+
+fn apply_mouse_events(
+  mut mouse_events: EventReader<CursorMoveEvent>,
+  mut mouse_controlled: Query<(&mut Transform, &MouseControlled, Option<&Children>)>,
+  player: Query<Entity, With<Player>>,
   window_query: Query<&Window>,
   camera_query: Query<(&GlobalTransform, &OrthographicProjection), With<Camera>>,
 ) {
@@ -74,29 +127,33 @@ fn apply_mouse_events(
     |position: Vec2| window_to_world(window, camera_transform, projection, position)
   };
 
-  for event in mouse_events.read() {
-    for (mut transform, mouse_controlled) in mouse_controlled.iter_mut() {
-      if mouse_controlled.id != event.device {
-        continue;
-      }
-      match event.event_data {
-        mischief::MischiefEventData::RelMotion { x, y } => {
-          let valid_positions =
-            Rect::from_corners(window_to_world(window.size()), window_to_world(Vec2::ZERO))
-              .inflate(-MOUSE_RADIUS);
-          let world_space_delta =
-            window_to_world(Vec2::new(x as f32, y as f32)) - window_to_world(Vec2::ZERO);
-          let next_pos = (transform.translation.xy() + world_space_delta)
-            .clamp(valid_positions.min, valid_positions.max);
+  for CursorMoveEvent {
+    device,
+    delta_world,
+  } in mouse_events.read()
+  {
+    let Some((mut transform, _, children)) = mouse_controlled
+      .iter_mut()
+      .filter(|(_, mc, _)| mc.id == *device)
+      .next()
+    else {
+      continue;
+    };
 
-          transform.translation = next_pos.extend(0.0);
-        }
-        mischief::MischiefEventData::Disconnect => {
-          panic!("Mouse disconnected!");
-        }
-        _ => {}
-      }
+    // the player has different movement rules; skip it
+    // TODO maybe add some properties to MouseControlled instead, and let this function handle both?
+    if children.is_some_and(|children| children.iter().any(|&child| player.contains(child))) {
+      continue;
     }
+
+    let valid_positions =
+      Rect::from_corners(window_to_world(window.size()), window_to_world(Vec2::ZERO))
+        .inflate(-MOUSE_RADIUS);
+
+    let next_pos =
+      (transform.translation.xy() + *delta_world).clamp(valid_positions.min, valid_positions.max);
+
+    transform.translation = next_pos.extend(transform.translation.z);
   }
 }
 

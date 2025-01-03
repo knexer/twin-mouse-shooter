@@ -15,10 +15,10 @@ impl Plugin for PlayingPlugin {
 }
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Hash)]
-struct Player;
+pub struct Player;
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Hash)]
-struct Reticle;
+pub struct Reticle;
 
 fn init_cursor_roles(
   mut commands: Commands,
