@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use bevy::{input::common_conditions::input_toggle_active, prelude::*};
 use intro::IntroPlugin;
 use mischief::{MischiefEvent, MischiefPlugin};
-use playing::{Player, PlayingPlugin};
+use playing::PlayingPlugin;
 use window_setup::WindowSetupPlugin;
 
 mod intro;
@@ -60,10 +60,17 @@ enum Hand {
   Right,
 }
 
-#[derive(Component, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Component, Debug, Clone, PartialEq)]
 struct MouseControlled {
   pub id: u32,
   pub hand: Option<Hand>,
+  pub physics: MouseControlConfig,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum MouseControlConfig {
+  Direct,
+  WithSpeedLimit(f32),
 }
 
 #[derive(Event, Debug)]
@@ -116,8 +123,8 @@ fn aggregate_mouse_events(
 
 fn apply_mouse_events(
   mut mouse_events: EventReader<CursorMoveEvent>,
-  mut mouse_controlled: Query<(&mut Transform, &MouseControlled, Option<&Children>)>,
-  player: Query<Entity, With<Player>>,
+  mut mouse_controlled: Query<(&mut Transform, &MouseControlled)>,
+  time: Res<Time>,
   window_query: Query<&Window>,
   camera_query: Query<(&GlobalTransform, &OrthographicProjection), With<Camera>>,
 ) {
@@ -132,28 +139,26 @@ fn apply_mouse_events(
     delta_world,
   } in mouse_events.read()
   {
-    let Some((mut transform, _, children)) = mouse_controlled
+    for (mut transform, mc) in mouse_controlled
       .iter_mut()
-      .filter(|(_, mc, _)| mc.id == *device)
-      .next()
-    else {
-      continue;
-    };
+      .filter(|(_, mc)| mc.id == *device)
+    {
+      let valid_positions =
+        Rect::from_corners(window_to_world(window.size()), window_to_world(Vec2::ZERO))
+          .inflate(-MOUSE_RADIUS);
 
-    // the player has different movement rules; skip it
-    // TODO maybe add some properties to MouseControlled instead, and let this function handle both?
-    if children.is_some_and(|children| children.iter().any(|&child| player.contains(child))) {
-      continue;
+      let velocity_clamped_delta_world = match mc.physics {
+        MouseControlConfig::Direct => *delta_world,
+        MouseControlConfig::WithSpeedLimit(limit) => {
+          delta_world.clamp_length(0., limit * time.delta_secs())
+        }
+      };
+
+      let next_pos = (transform.translation.xy() + velocity_clamped_delta_world)
+        .clamp(valid_positions.min, valid_positions.max);
+
+      transform.translation = next_pos.extend(transform.translation.z);
     }
-
-    let valid_positions =
-      Rect::from_corners(window_to_world(window.size()), window_to_world(Vec2::ZERO))
-        .inflate(-MOUSE_RADIUS);
-
-    let next_pos =
-      (transform.translation.xy() + *delta_world).clamp(valid_positions.min, valid_positions.max);
-
-    transform.translation = next_pos.extend(transform.translation.z);
   }
 }
 

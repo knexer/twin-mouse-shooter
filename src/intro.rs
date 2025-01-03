@@ -4,8 +4,8 @@ use crate::{
   apply_mouse_events,
   mischief::MischiefSession,
   path::{Path, WindDirection},
-  window_to_world, AppState, Hand, MouseControlled, MOUSE_RADIUS, PLAYER_COLOR, RETICLE_COLOR,
-  UNASSIGNED_COLOR,
+  window_to_world, AppState, Hand, MouseControlConfig, MouseControlled, MOUSE_RADIUS, PLAYER_COLOR,
+  RETICLE_COLOR, UNASSIGNED_COLOR,
 };
 
 pub struct IntroPlugin;
@@ -171,6 +171,7 @@ fn spawn_cursors(
       MouseControlled {
         id: mouse.id,
         hand: None,
+        physics: MouseControlConfig::Direct,
       },
       Mesh2d::from(meshes.add(RegularPolygon::new(MOUSE_RADIUS, 3u32 + i as u32))),
       MeshMaterial2d(materials.add(Color::WHITE)),

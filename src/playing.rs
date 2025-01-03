@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 
-use crate::{AppState, Hand, MouseControlled, MOUSE_RADIUS, PLAYER_COLOR, RETICLE_COLOR};
+use crate::{
+  AppState, Hand, MouseControlConfig, MouseControlled, MOUSE_RADIUS, PLAYER_COLOR, RETICLE_COLOR,
+};
 
 // MVP tasks:
 // Give player/reticle roles to the cursors. (done)
@@ -15,18 +17,18 @@ impl Plugin for PlayingPlugin {
 }
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Player;
+struct Player;
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Reticle;
+struct Reticle;
 
 fn init_cursor_roles(
   mut commands: Commands,
-  cursors: Query<(Entity, &MouseControlled)>,
+  mut cursors: Query<(Entity, &mut MouseControlled)>,
   mut meshes: ResMut<Assets<Mesh>>,
   mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-  for (entity, mouse_controlled) in cursors.iter() {
+  for (entity, mut mouse_controlled) in cursors.iter_mut() {
     match mouse_controlled.hand {
       Some(Hand::Left) => {
         commands.entity(entity).with_child((
@@ -34,6 +36,7 @@ fn init_cursor_roles(
           Mesh2d::from(meshes.add(Circle::new(MOUSE_RADIUS))),
           MeshMaterial2d(materials.add(PLAYER_COLOR)),
         ));
+        mouse_controlled.physics = MouseControlConfig::WithSpeedLimit(8.);
       }
       Some(Hand::Right) => {
         // TODO make the reticle more reticle-y (e.g. a crosshair or box-corners with a dot in the center)
@@ -43,6 +46,7 @@ fn init_cursor_roles(
           Mesh2d::from(meshes.add(Rectangle::new(2. * MOUSE_RADIUS, 2. * MOUSE_RADIUS))),
           MeshMaterial2d(materials.add(RETICLE_COLOR)),
         ));
+        mouse_controlled.physics = MouseControlConfig::Direct;
       }
       None => {}
     }
