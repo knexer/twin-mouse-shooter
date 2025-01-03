@@ -4,8 +4,9 @@ use crate::{
   apply_mouse_events,
   mischief::MischiefSession,
   path::{Path, WindDirection},
-  window_to_world, AppState, Hand, MouseControlConfig, MouseControlled, MOUSE_RADIUS, PLAYER_COLOR,
-  RETICLE_COLOR, UNASSIGNED_COLOR,
+  window_setup::PlayArea,
+  AppState, Hand, MouseControlConfig, MouseControlled, MOUSE_RADIUS, PLAYER_COLOR, RETICLE_COLOR,
+  UNASSIGNED_COLOR,
 };
 
 pub struct IntroPlugin;
@@ -116,27 +117,16 @@ fn spawn_boxes(
   mut commands: Commands,
   mut meshes: ResMut<Assets<Mesh>>,
   mut materials: ResMut<Assets<ColorMaterial>>,
-  window: Query<&Window>,
-  camera_query: Query<(&GlobalTransform, &OrthographicProjection), With<Camera>>,
+  play_area: Res<PlayArea>,
 ) {
-  let window = window.single();
-  let window_to_world = {
-    let (camera_transform, projection) = camera_query.single();
-    |position: Vec2| window_to_world(window, camera_transform, projection, position)
-  };
-
-  let world_size = (window_to_world(Vec2::new(window.width(), window.height()))
-    - window_to_world(Vec2::ZERO))
-  .abs();
-
   let inset_world = 0.5;
   let rect_size = Vec2::new(
-    world_size.x / 4.0 - inset_world,
-    world_size.y - 2. * inset_world,
+    play_area.size_world.x / 4.0 - inset_world,
+    play_area.size_world.y - 2. * inset_world,
   );
   let box_handle = meshes.add(make_box_mesh(rect_size, 0.05, 0.5));
 
-  let left_center = window_to_world(Vec2::new(window.width() / 8.0, window.height() / 2.0))
+  let left_center = Vec2::new(play_area.size_world.x / 8.0, play_area.size_world.y / 2.0)
     + Vec2::new(inset_world / 2., 0.0);
   commands.spawn((
     Transform::from_translation(left_center.extend(0.0)),
@@ -145,8 +135,10 @@ fn spawn_boxes(
     DespawnOnHandAssignment(Hand::Left),
   ));
 
-  let right_center = window_to_world(Vec2::new(window.width() * 7.0 / 8.0, window.height() / 2.0))
-    - Vec2::new(inset_world / 2., 0.0);
+  let right_center = Vec2::new(
+    play_area.size_world.x * 7. / 8.,
+    play_area.size_world.y / 2.0,
+  ) - Vec2::new(inset_world / 2., 0.0);
   commands.spawn((
     Transform::from_translation(right_center.extend(0.0)),
     Mesh2d::from(box_handle),
@@ -181,15 +173,8 @@ fn spawn_cursors(
 
 fn assign_cursor_hands(
   mut mouse_controlled: Query<(&Transform, &mut MouseControlled)>,
-  window_query: Query<&Window>,
-  camera_query: Query<(&GlobalTransform, &OrthographicProjection), With<Camera>>,
+  play_area: Res<PlayArea>,
 ) {
-  let window = window_query.single();
-  let window_to_world = {
-    let (camera_transform, projection) = camera_query.single();
-    |position: Vec2| window_to_world(window, camera_transform, projection, position)
-  };
-
   let needs_left = !mouse_controlled
     .iter()
     .any(|(_, mc)| mc.hand == Some(Hand::Left));
@@ -202,13 +187,9 @@ fn assign_cursor_hands(
       continue;
     }
 
-    if needs_left
-      && transform.translation.x < window_to_world(Vec2::new(window.width() / 4.0, 0.0)).x
-    {
+    if needs_left && transform.translation.x < play_area.size_world.x / 4. {
       mouse_controlled.hand = Some(Hand::Left);
-    } else if needs_right
-      && transform.translation.x > window_to_world(Vec2::new(window.width() * 3.0 / 4.0, 0.0)).x
-    {
+    } else if needs_right && transform.translation.x > play_area.size_world.x * 3. / 4. {
       mouse_controlled.hand = Some(Hand::Right);
     }
   }
@@ -217,15 +198,8 @@ fn assign_cursor_hands(
 fn color_cursors(
   mouse_controlled: Query<(&Transform, &MouseControlled, &MeshMaterial2d<ColorMaterial>)>,
   mut materials: ResMut<Assets<ColorMaterial>>,
-  window_query: Query<&Window>,
-  camera_query: Query<(&GlobalTransform, &OrthographicProjection), With<Camera>>,
+  play_area: Res<PlayArea>,
 ) {
-  let window = window_query.single();
-  let window_to_world = {
-    let (camera_transform, projection) = camera_query.single();
-    |position: Vec2| window_to_world(window, camera_transform, projection, position)
-  };
-
   let needs_left = !mouse_controlled
     .iter()
     .any(|(_, mc, _)| mc.hand == Some(Hand::Left));
@@ -238,8 +212,8 @@ fn color_cursors(
       Some(Hand::Left) => PLAYER_COLOR,
       Some(Hand::Right) => RETICLE_COLOR,
       None => {
-        let left_edge = window_to_world(Vec2::new(window.width() / 4.0, 0.0)).x;
-        let right_edge = window_to_world(Vec2::new(window.width() * 3.0 / 4.0, 0.0)).x;
+        let left_edge = play_area.size_world.x / 4.;
+        let right_edge = play_area.size_world.x * 3. / 4.;
         let center = (left_edge + right_edge) / 2.0;
         let proportion_to_right = (transform.translation.x - center) / (right_edge - center);
         let proportion_to_left = -proportion_to_right;

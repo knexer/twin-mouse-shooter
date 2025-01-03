@@ -4,7 +4,7 @@ use bevy::{input::common_conditions::input_toggle_active, prelude::*};
 use intro::IntroPlugin;
 use mischief::{MischiefEvent, MischiefPlugin};
 use playing::PlayingPlugin;
-use window_setup::WindowSetupPlugin;
+use window_setup::{PlayArea, WindowSetupPlugin};
 
 mod intro;
 mod mischief;
@@ -82,21 +82,15 @@ pub struct CursorMoveEvent {
 fn aggregate_mouse_events(
   mut mouse_events: EventReader<MischiefEvent>,
   mut out_events: EventWriter<CursorMoveEvent>,
-  window_query: Query<&Window>,
-  camera_query: Query<(&GlobalTransform, &OrthographicProjection), With<Camera>>,
+  play_area: Res<PlayArea>,
 ) {
-  let window_to_world = {
-    let window = window_query.single();
-    let (camera_transform, projection) = camera_query.single();
-    |position: Vec2| window_to_world(window, camera_transform, projection, position)
-  };
-
   mouse_events
     .read()
     .map(|event| {
       let world_delta = match event.event_data {
         mischief::MischiefEventData::RelMotion { x, y } => {
-          window_to_world(Vec2::new(x as f32, y as f32)) - window_to_world(Vec2::ZERO)
+          (play_area.window_to_world)(Vec2::new(x as f32, y as f32))
+            - (play_area.window_to_world)(Vec2::ZERO)
         }
         mischief::MischiefEventData::Disconnect => {
           panic!("Mouse disconnected!");
@@ -125,15 +119,8 @@ fn apply_mouse_events(
   mut mouse_events: EventReader<CursorMoveEvent>,
   mut mouse_controlled: Query<(&mut Transform, &MouseControlled)>,
   time: Res<Time>,
-  window_query: Query<&Window>,
-  camera_query: Query<(&GlobalTransform, &OrthographicProjection), With<Camera>>,
+  play_area: Res<PlayArea>,
 ) {
-  let window = window_query.single();
-  let window_to_world = {
-    let (camera_transform, projection) = camera_query.single();
-    |position: Vec2| window_to_world(window, camera_transform, projection, position)
-  };
-
   for CursorMoveEvent {
     device,
     delta_world,
@@ -144,7 +131,7 @@ fn apply_mouse_events(
       .filter(|(_, mc)| mc.id == *device)
     {
       let valid_positions =
-        Rect::from_corners(window_to_world(window.size()), window_to_world(Vec2::ZERO))
+        Rect::from_corners(play_area.size_world / 2., play_area.size_world / -2.)
           .inflate(-MOUSE_RADIUS);
 
       let velocity_clamped_delta_world = match mc.physics {
@@ -160,21 +147,4 @@ fn apply_mouse_events(
       transform.translation = next_pos.extend(transform.translation.z);
     }
   }
-}
-
-fn window_to_world(
-  window: &Window,
-  camera_transform: &GlobalTransform,
-  projection: &OrthographicProjection,
-  position: Vec2,
-) -> Vec2 {
-  let center = camera_transform.translation().truncate();
-  let half_width = (window.width() / 2.0) * projection.scale;
-  let half_height = (window.height() / 2.0) * projection.scale;
-  let left = center.x - half_width;
-  let bottom = center.y - half_height;
-  Vec2::new(
-    left + position.x * projection.scale,
-    bottom + (window.height() - position.y) * projection.scale,
-  )
 }
