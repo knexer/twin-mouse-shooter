@@ -36,6 +36,7 @@ fn main() {
     .add_plugins(IntroPlugin)
     .add_plugins(PlayingPlugin)
     .insert_state(AppState::Loading)
+    .enable_state_scoped_entities::<AppState>()
     .add_event::<CursorMoveEvent>()
     .add_systems(
       Update,
@@ -52,6 +53,7 @@ enum AppState {
   Loading,
   Intro,
   Playing,
+  GameOver,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

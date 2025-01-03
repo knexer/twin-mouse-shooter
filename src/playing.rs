@@ -9,8 +9,15 @@ use crate::{
 // MVP tasks:
 // Spawn enemies (done)
 // Player shoots (done)
-// Enemies damage the player
-// Player damages enemies (part done, needs collision detection and partial damage)
+// Player damages enemies, enemies die (done)
+// Enemies damage the player (done)
+// Player dies, game over (done)
+
+// Killed enemies should increase score
+// Game over screen, show score, click to restart
+// Enemies should move (random direction, with spin, asteroids style)
+// Enemies should shoot
+// Show player/enemy health
 
 pub struct PlayingPlugin;
 
@@ -28,15 +35,26 @@ impl Plugin for PlayingPlugin {
       .add_systems(OnEnter(AppState::Playing), init_cursor_roles)
       .add_systems(
         Update,
-        (spawn_enemy, shoot).run_if(in_state(AppState::Playing)),
+        (
+          shoot,
+          despawn_dead_enemies,
+          enemies_damage_player,
+          despawn_dead_enemies,
+          spawn_enemy,
+          game_over,
+        )
+          .chain()
+          .run_if(in_state(AppState::Playing)),
       );
   }
 }
 
-#[derive(Component, Debug, Clone, PartialEq, Eq, Hash)]
-struct Player;
+#[derive(Component, Debug, Clone, PartialEq)]
+struct Player {
+  hp: f32,
+}
 
-#[derive(Component, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Component, Debug, Clone, PartialEq)]
 struct Reticle;
 
 fn init_cursor_roles(
@@ -49,9 +67,10 @@ fn init_cursor_roles(
     match mouse_controlled.hand {
       Some(Hand::Left) => {
         commands.entity(entity).insert((
-          Player,
+          Player { hp: 10. },
           Mesh2d::from(meshes.add(Circle::new(MOUSE_RADIUS))),
           MeshMaterial2d(materials.add(PLAYER_COLOR)),
+          StateScoped(AppState::Playing),
         ));
         mouse_controlled.physics = MouseControlConfig::WithSpeedLimit(8.);
       }
@@ -62,6 +81,7 @@ fn init_cursor_roles(
           Reticle,
           Mesh2d::from(meshes.add(Rectangle::new(2. * MOUSE_RADIUS, 2. * MOUSE_RADIUS))),
           MeshMaterial2d(materials.add(RETICLE_COLOR)),
+          StateScoped(AppState::Playing),
         ));
         mouse_controlled.physics = MouseControlConfig::Direct;
       }
@@ -70,8 +90,10 @@ fn init_cursor_roles(
   }
 }
 
-#[derive(Component, Debug, Clone, PartialEq, Eq, Hash)]
-struct Enemy;
+#[derive(Component, Debug, Clone, PartialEq)]
+struct Enemy {
+  hp: f32,
+}
 
 #[derive(Resource)]
 struct EnemySpawnTimer(Timer);
@@ -101,11 +123,12 @@ fn spawn_enemy(
   .unwrap();
 
   commands.spawn((
-    Enemy,
+    Enemy { hp: 3. },
     Transform::from_translation(enemy_position.extend(0.0)),
     GlobalTransform::default(),
     Mesh2d::from(meshes.add(RegularPolygon::new(0.25, 3))),
     MeshMaterial2d(materials.add(Color::hsl(0., 0.95, 0.7))),
+    StateScoped(AppState::Playing),
   ));
 }
 
@@ -113,9 +136,8 @@ fn spawn_enemy(
 struct PlayerShootTimer(Timer);
 
 fn shoot(
-  mut commands: Commands,
   player: Query<&Transform, With<Reticle>>,
-  enemies: Query<(Entity, &Transform), With<Enemy>>,
+  mut enemies: Query<(&Transform, &mut Enemy)>,
   time: Res<Time>,
   mut timer: ResMut<PlayerShootTimer>,
 ) {
@@ -125,10 +147,39 @@ fn shoot(
 
   let player_position = player.single().translation;
 
-  for (enemy_entity, enemy_transform) in enemies.iter() {
-    // TODO actually check for mesh intersection
+  for (enemy_transform, mut enemy) in enemies.iter_mut() {
+    // TODO maybe check for collision more better?
     if (enemy_transform.translation.xy() - player_position.xy()).length() < 0.5 {
-      commands.entity(enemy_entity).despawn();
+      enemy.hp -= 1.;
     }
+  }
+}
+
+fn despawn_dead_enemies(mut commands: Commands, enemies: Query<(Entity, &Enemy)>) {
+  for (entity, enemy) in enemies.iter() {
+    if enemy.hp <= 0. {
+      commands.entity(entity).despawn();
+    }
+  }
+}
+
+fn enemies_damage_player(
+  mut player: Query<(&Transform, &mut Player)>,
+  mut enemies: Query<(&Transform, &mut Enemy)>,
+) {
+  for (enemy_transform, mut enemy) in enemies.iter_mut() {
+    let (player_transform, mut player) = player.single_mut();
+    if (enemy_transform.translation.xy() - player_transform.translation.xy()).length() < 0.5 {
+      player.hp -= 1.;
+      enemy.hp -= 1.;
+    }
+  }
+}
+
+fn game_over(player: Query<&Player>, mut next_state: ResMut<NextState<AppState>>) {
+  let player = player.single();
+
+  if player.hp <= 0. {
+    next_state.set(AppState::Intro);
   }
 }
