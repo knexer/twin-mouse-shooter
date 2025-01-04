@@ -12,12 +12,13 @@ use crate::{
 // Player damages enemies, enemies die (done)
 // Enemies damage the player (done)
 // Player dies, game over (done)
+// Enemies should move (random direction, with spin, asteroids style) (done)
 
 // Killed enemies should increase score
 // Game over screen, show score, click to restart
-// Enemies should move (random direction, with spin, asteroids style)
-// Enemies should shoot
+// Enemies should shoot maybe?
 // Show player/enemy health
+// Click to swap
 
 pub struct PlayingPlugin;
 
@@ -38,6 +39,7 @@ impl Plugin for PlayingPlugin {
         (
           shoot,
           despawn_dead_enemies,
+          move_enemies,
           enemies_damage_player,
           despawn_dead_enemies,
           spawn_enemy,
@@ -51,7 +53,7 @@ impl Plugin for PlayingPlugin {
 
 #[derive(Component, Debug, Clone, PartialEq)]
 struct Player {
-  hp: f32,
+  hp: i32,
 }
 
 #[derive(Component, Debug, Clone, PartialEq)]
@@ -67,7 +69,7 @@ fn init_cursor_roles(
     match mouse_controlled.hand {
       Some(Hand::Left) => {
         commands.entity(entity).insert((
-          Player { hp: 10. },
+          Player { hp: 10 },
           Mesh2d::from(meshes.add(Circle::new(MOUSE_RADIUS))),
           MeshMaterial2d(materials.add(PLAYER_COLOR)),
           StateScoped(AppState::Playing),
@@ -92,7 +94,9 @@ fn init_cursor_roles(
 
 #[derive(Component, Debug, Clone, PartialEq)]
 struct Enemy {
-  hp: f32,
+  hp: i32,
+  velocity: Vec2,
+  radial_velocity: f32,
 }
 
 #[derive(Resource)]
@@ -102,7 +106,6 @@ fn spawn_enemy(
   mut commands: Commands,
   mut meshes: ResMut<Assets<Mesh>>,
   mut materials: ResMut<Assets<ColorMaterial>>,
-  player: Query<&Transform, With<Player>>,
   time: Res<Time>,
   mut timer: ResMut<EnemySpawnTimer>,
   play_area: Res<PlayArea>,
@@ -111,25 +114,51 @@ fn spawn_enemy(
     return;
   }
 
-  let player_position = player.single().translation;
-  let min_distance = 2.5;
-
   let mut rng = rand::thread_rng();
-  let enemy_position = std::iter::from_fn(|| {
-    Some(rng.gen::<Vec2>() * play_area.size_world - play_area.size_world / 2.0)
-  })
-  .filter(|&enemy_position| (enemy_position - player_position.truncate()).length() >= min_distance)
-  .next()
-  .unwrap();
+
+  // Enemies spawn just outside and move towards the center
+  let goal_position = rng.gen::<Vec2>() * play_area.size_world / 2.0 - play_area.size_world / 4.0;
+  let spawn_direction = Vec2::from_angle(rng.gen_range(0.0..std::f32::consts::PI * 2.0));
+  let spawn_position = {
+    let spawn_half_size = play_area.size_world / 2. + Vec2::new(0.5, 0.5);
+    let t_x = if spawn_direction.x > 0. {
+      (spawn_half_size.x - goal_position.x) / spawn_direction.x
+    } else {
+      (-spawn_half_size.x - goal_position.x) / spawn_direction.x
+    };
+    let t_y = if spawn_direction.y > 0. {
+      (spawn_half_size.y - goal_position.y) / spawn_direction.y
+    } else {
+      (-spawn_half_size.y - goal_position.y) / spawn_direction.y
+    };
+    goal_position + spawn_direction * t_x.min(t_y)
+  };
+
+  let min_speed = 1.0;
+  let max_speed = 4.0;
+  let max_radial_velocity = 3.0;
 
   commands.spawn((
-    Enemy { hp: 3. },
-    Transform::from_translation(enemy_position.extend(0.0)),
+    Enemy {
+      hp: 3,
+      velocity: -spawn_direction * rng.gen_range(min_speed..max_speed),
+      radial_velocity: rng.gen_range(-max_radial_velocity..max_radial_velocity),
+    },
+    Transform::from_translation(spawn_position.extend(0.0)),
     GlobalTransform::default(),
     Mesh2d::from(meshes.add(RegularPolygon::new(0.25, 3))),
     MeshMaterial2d(materials.add(Color::hsl(0., 0.95, 0.7))),
     StateScoped(AppState::Playing),
   ));
+}
+
+fn move_enemies(mut enemies: Query<(&mut Transform, &Enemy)>, time: Res<Time>) {
+  for (mut transform, enemy) in enemies.iter_mut() {
+    transform.translation += enemy.velocity.extend(0.0) * time.delta_secs();
+
+    let rotation = Quat::from_rotation_z(enemy.radial_velocity * time.delta_secs());
+    transform.rotation *= rotation;
+  }
 }
 
 #[derive(Resource)]
@@ -150,14 +179,14 @@ fn shoot(
   for (enemy_transform, mut enemy) in enemies.iter_mut() {
     // TODO maybe check for collision more better?
     if (enemy_transform.translation.xy() - player_position.xy()).length() < 0.5 {
-      enemy.hp -= 1.;
+      enemy.hp -= 1;
     }
   }
 }
 
 fn despawn_dead_enemies(mut commands: Commands, enemies: Query<(Entity, &Enemy)>) {
   for (entity, enemy) in enemies.iter() {
-    if enemy.hp <= 0. {
+    if enemy.hp <= 0 {
       commands.entity(entity).despawn();
     }
   }
@@ -170,8 +199,8 @@ fn enemies_damage_player(
   for (enemy_transform, mut enemy) in enemies.iter_mut() {
     let (player_transform, mut player) = player.single_mut();
     if (enemy_transform.translation.xy() - player_transform.translation.xy()).length() < 0.5 {
-      player.hp -= 1.;
-      enemy.hp -= 1.;
+      player.hp -= 1;
+      enemy.hp -= 1;
     }
   }
 }
@@ -179,7 +208,7 @@ fn enemies_damage_player(
 fn game_over(player: Query<&Player>, mut next_state: ResMut<NextState<AppState>>) {
   let player = player.single();
 
-  if player.hp <= 0. {
+  if player.hp <= 0 {
     next_state.set(AppState::Intro);
   }
 }
