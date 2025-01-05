@@ -2,11 +2,13 @@ use std::collections::HashMap;
 
 use bevy::{input::common_conditions::input_toggle_active, prelude::*};
 use bevy_prototype_lyon::plugin::ShapePlugin;
+use game_over::GameOverPlugin;
 use intro::IntroPlugin;
 use mischief::{MischiefEvent, MischiefPlugin};
 use playing::PlayingPlugin;
 use window_setup::{PlayArea, WindowSetupPlugin};
 
+mod game_over;
 mod intro;
 mod mischief;
 mod path;
@@ -37,6 +39,7 @@ fn main() {
     .add_plugins(MischiefPlugin)
     .add_plugins(IntroPlugin)
     .add_plugins(PlayingPlugin)
+    .add_plugins(GameOverPlugin)
     .insert_state(AppState::Loading)
     .enable_state_scoped_entities::<AppState>()
     .add_event::<CursorMoveEvent>()

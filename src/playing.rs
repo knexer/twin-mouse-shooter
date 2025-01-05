@@ -19,8 +19,8 @@ use crate::{
 // Show player/enemy health (fill in the sprite in proportion to health) (done)
 // Scale up the enemy frequency over time (done)
 // Killed enemies should increase score (done)
+// Game over screen, show score, click to restart (done)
 
-// Game over screen, show score, click to restart
 // Enemies should shoot maybe?
 // Click to swap
 
@@ -31,7 +31,7 @@ impl Plugin for PlayingPlugin {
     app
       .enable_state_scoped_resource::<EnemySpawnTimer>(AppState::Playing)
       .enable_state_scoped_resource::<PlayerShootTimer>(AppState::Playing)
-      .enable_state_scoped_resource::<Score>(AppState::Playing)
+      .enable_state_scoped_resource::<Score>(AppState::GameOver)
       .add_systems(
         OnEnter(AppState::Playing),
         (init_resources, init_cursor_roles, spawn_score_display),
@@ -110,7 +110,6 @@ fn init_cursor_roles(mut commands: Commands, mut cursors: Query<(Entity, &mut Mo
                   .with_tolerance(0.02),
               })
               .build(),
-            StateScoped(AppState::Playing),
           ))
           .with_child((
             HealthDisplay {
@@ -140,9 +139,7 @@ fn init_cursor_roles(mut commands: Commands, mut cursors: Query<(Entity, &mut Mo
           .stroke(Stroke::new(RETICLE_COLOR, 0.1))
           .build();
 
-        commands
-          .entity(entity)
-          .insert((Reticle, shape, StateScoped(AppState::Playing)));
+        commands.entity(entity).insert((Reticle, shape));
         mouse_controlled.physics = MouseControlConfig::Direct;
       }
       None => {}
@@ -373,17 +370,17 @@ fn spawn_score_display(mut commands: Commands) {
       },
       Node {
         position_type: PositionType::Absolute,
-        top: Val::Px(10.0),
-        left: Val::Px(10.0),
+        top: Val::Px(15.0),
+        left: Val::Px(15.0),
         ..default()
       },
-      StateScoped(AppState::Playing),
+      StateScoped(AppState::GameOver),
     ))
     .with_child((
       TextSpan::default(),
       ScoreDisplay,
       TextFont {
-        font_size: 20.0,
+        font_size: 30.0,
         ..default()
       },
     ));
@@ -399,6 +396,6 @@ fn game_over(player: Query<&Player>, mut next_state: ResMut<NextState<AppState>>
   let player = player.single();
 
   if player.hp <= 0 {
-    next_state.set(AppState::Intro);
+    next_state.set(AppState::GameOver);
   }
 }
