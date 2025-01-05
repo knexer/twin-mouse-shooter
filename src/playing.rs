@@ -1,4 +1,6 @@
+use bevy::math::primitives::RegularPolygon;
 use bevy::prelude::*;
+use bevy_prototype_lyon::prelude::*;
 use rand::Rng;
 
 use crate::{
@@ -14,10 +16,11 @@ use crate::{
 // Player dies, game over (done)
 // Enemies should move (random direction, with spin, asteroids style) (done)
 
+// Show player/enemy health (fill in the sprite in proportion to health)
 // Killed enemies should increase score
 // Game over screen, show score, click to restart
 // Enemies should shoot maybe?
-// Show player/enemy health
+// Scale up the enemy frequency over time
 // Click to swap
 
 pub struct PlayingPlugin;
@@ -77,11 +80,28 @@ fn init_cursor_roles(
         mouse_controlled.physics = MouseControlConfig::WithSpeedLimit(8.);
       }
       Some(Hand::Right) => {
-        // TODO make the reticle more reticle-y (e.g. a crosshair or box-corners with a dot in the center)
-        // This might require making the mesh from multiple shapes/paths.
+        let corner = |x: f32, y: f32| -> ShapePath {
+          ShapePath::new()
+            .move_to(Vec2::new(x * MOUSE_RADIUS, y * MOUSE_RADIUS / 2.))
+            .line_to(Vec2::new(x * MOUSE_RADIUS, y * MOUSE_RADIUS))
+            .line_to(Vec2::new(x * MOUSE_RADIUS / 2., y * MOUSE_RADIUS))
+        };
+        let shape = ShapeBuilder::new()
+          .add(&corner(1., 1.))
+          .add(&corner(-1., 1.))
+          .add(&corner(-1., -1.))
+          .add(&corner(1., -1.))
+          .add(
+            &ShapePath::new()
+              .move_to(Vec2::new(0., -0.05))
+              .line_to(Vec2::new(0., 0.05)),
+          )
+          .stroke(Stroke::new(RETICLE_COLOR, 0.1))
+          .build();
+
         commands.entity(entity).insert((
           Reticle,
-          Mesh2d::from(meshes.add(Rectangle::new(2. * MOUSE_RADIUS, 2. * MOUSE_RADIUS))),
+          shape,
           MeshMaterial2d(materials.add(RETICLE_COLOR)),
           StateScoped(AppState::Playing),
         ));

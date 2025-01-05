@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use bevy::{input::common_conditions::input_toggle_active, prelude::*};
+use bevy_prototype_lyon::plugin::ShapePlugin;
 use intro::IntroPlugin;
 use mischief::{MischiefEvent, MischiefPlugin};
 use playing::PlayingPlugin;
@@ -31,6 +32,7 @@ const RETICLE_COLOR: Color = Color::hsl(300., 0.95, 0.7);
 fn main() {
   App::new()
     .add_plugins(DefaultPlugins)
+    .add_plugins(ShapePlugin)
     .add_plugins(WindowSetupPlugin)
     .add_plugins(MischiefPlugin)
     .add_plugins(IntroPlugin)

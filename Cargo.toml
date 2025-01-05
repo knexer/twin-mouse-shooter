@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 bevy = { version = "0.15.0", features = ["dynamic_linking", "wav"] }
 bevy-inspector-egui = "0.28.0"
+bevy_prototype_lyon = { git = "https://github.com/Nilirad/bevy_prototype_lyon.git", rev="c321a36" }
 libc = "0.2.149"
 rand = "0.8.5"
 
