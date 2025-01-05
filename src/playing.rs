@@ -54,6 +54,8 @@ impl Plugin for PlayingPlugin {
   }
 }
 
+const PLAYER_MAX_HP: i32 = 10;
+
 #[derive(Component, Debug, Clone, PartialEq)]
 struct Player {
   hp: i32,
@@ -71,10 +73,50 @@ fn init_cursor_roles(
   for (entity, mut mouse_controlled) in cursors.iter_mut() {
     match mouse_controlled.hand {
       Some(Hand::Left) => {
+        let shape_for_hp = |hp: i32| -> Shape {
+          // Create a circle, filled from the bottom up in proportion to the player's health
+          // The top portion is hollow.
+          let normalized_hp = hp as f32 / PLAYER_MAX_HP as f32;
+          let arc_angle = (normalized_hp * 2. - 1.).asin();
+          let top_arc = ShapePath::new()
+            .move_to(Vec2::new(arc_angle.cos(), arc_angle.sin()) * MOUSE_RADIUS)
+            .arc(
+              Vec2::ZERO,
+              Vec2::splat(MOUSE_RADIUS),
+              std::f32::consts::PI - 2. * arc_angle, // sweep angle
+              0.,
+            );
+          let bottom_filled = ShapePath::new()
+            .move_to(Vec2::new(arc_angle.cos(), arc_angle.sin()) * MOUSE_RADIUS)
+            .arc(
+              Vec2::ZERO,
+              Vec2::splat(MOUSE_RADIUS),
+              (std::f32::consts::PI - 2. * arc_angle) - 2. * std::f32::consts::PI, // sweep angle
+              0.,
+            )
+            .close();
+          ShapeBuilder::new()
+            .add(&top_arc)
+            .add(&bottom_filled)
+            .add(
+              &ShapePath::new()
+                .move_to(Vec2::new(0., -0.05))
+                .line_to(Vec2::new(0., 0.05)),
+            )
+            .stroke(Stroke {
+              color: PLAYER_COLOR,
+              options: StrokeOptions::default()
+                .with_tolerance(0.01)
+                .with_line_width(0.1),
+            })
+            // .fill(PLAYER_COLOR)
+            .build()
+        };
+        // TODO part fill, part stroke, how do?
+        // Probably just have to do two separate entities... not too bad.
         commands.entity(entity).insert((
-          Player { hp: 10 },
-          Mesh2d::from(meshes.add(Circle::new(MOUSE_RADIUS))),
-          MeshMaterial2d(materials.add(PLAYER_COLOR)),
+          Player { hp: PLAYER_MAX_HP },
+          shape_for_hp(PLAYER_MAX_HP - 4),
           StateScoped(AppState::Playing),
         ));
         mouse_controlled.physics = MouseControlConfig::WithSpeedLimit(8.);
