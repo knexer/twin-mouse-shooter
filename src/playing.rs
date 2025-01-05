@@ -5,8 +5,8 @@ use bevy_prototype_lyon::prelude::*;
 use rand::Rng;
 
 use crate::{
-  window_setup::PlayArea, AppState, Hand, MouseControlConfig, MouseControlled, MOUSE_RADIUS,
-  PLAYER_COLOR, RETICLE_COLOR,
+  window_setup::PlayArea, AppState, EnableStateScopedResource, Hand, MouseControlConfig,
+  MouseControlled, MOUSE_RADIUS, PLAYER_COLOR, RETICLE_COLOR,
 };
 
 // MVP tasks:
@@ -18,8 +18,8 @@ use crate::{
 // Enemies should move (random direction, with spin, asteroids style) (done)
 // Show player/enemy health (fill in the sprite in proportion to health) (done)
 // Scale up the enemy frequency over time (done)
+// Killed enemies should increase score (done)
 
-// Killed enemies should increase score
 // Game over screen, show score, click to restart
 // Enemies should shoot maybe?
 // Click to swap
@@ -29,13 +29,12 @@ pub struct PlayingPlugin;
 impl Plugin for PlayingPlugin {
   fn build(&self, app: &mut App) {
     app
-      .insert_resource(PlayerShootTimer(Timer::from_seconds(
-        0.05,
-        TimerMode::Repeating,
-      )))
+      .enable_state_scoped_resource::<EnemySpawnTimer>(AppState::Playing)
+      .enable_state_scoped_resource::<PlayerShootTimer>(AppState::Playing)
+      .enable_state_scoped_resource::<Score>(AppState::Playing)
       .add_systems(
         OnEnter(AppState::Playing),
-        (init_enemy_spawn_timer, init_cursor_roles),
+        (init_resources, init_cursor_roles, spawn_score_display),
       )
       .add_systems(
         Update,
@@ -46,6 +45,7 @@ impl Plugin for PlayingPlugin {
           enemies_damage_player,
           display_player_health,
           despawn_dead_enemies,
+          update_score_display,
           spawn_enemy,
           display_enemy_health,
           game_over,
@@ -160,11 +160,19 @@ struct Enemy {
 #[derive(Resource)]
 struct EnemySpawnTimer(Timer);
 
-fn init_enemy_spawn_timer(mut commands: Commands) {
+#[derive(Resource)]
+struct Score(i32);
+
+fn init_resources(mut commands: Commands) {
   commands.insert_resource(EnemySpawnTimer(Timer::from_seconds(
     1.0,
     TimerMode::Repeating,
   )));
+  commands.insert_resource(PlayerShootTimer(Timer::from_seconds(
+    0.05,
+    TimerMode::Repeating,
+  )));
+  commands.insert_resource(Score(0));
 }
 
 fn spawn_enemy(
@@ -290,10 +298,15 @@ fn shoot(
   }
 }
 
-fn despawn_dead_enemies(mut commands: Commands, enemies: Query<(Entity, &Enemy)>) {
+fn despawn_dead_enemies(
+  mut commands: Commands,
+  enemies: Query<(Entity, &Enemy)>,
+  mut score: ResMut<Score>,
+) {
   for (entity, enemy) in enemies.iter() {
     if enemy.hp <= 0 {
       commands.entity(entity).despawn_recursive();
+      score.0 += 1;
     }
   }
 }
@@ -344,6 +357,41 @@ fn display_enemy_health(
         .entity(entity)
         .insert(health_display.shapes[enemy.hp as usize].clone());
     }
+  }
+}
+
+#[derive(Component)]
+struct ScoreDisplay;
+
+fn spawn_score_display(mut commands: Commands) {
+  commands
+    .spawn((
+      Text::new("Score: "),
+      TextFont {
+        font_size: 20.0,
+        ..default()
+      },
+      Node {
+        position_type: PositionType::Absolute,
+        top: Val::Px(10.0),
+        left: Val::Px(10.0),
+        ..default()
+      },
+      StateScoped(AppState::Playing),
+    ))
+    .with_child((
+      TextSpan::default(),
+      ScoreDisplay,
+      TextFont {
+        font_size: 20.0,
+        ..default()
+      },
+    ));
+}
+
+fn update_score_display(score: Res<Score>, mut text: Query<&mut TextSpan, With<ScoreDisplay>>) {
+  for mut text in text.iter_mut() {
+    text.0 = score.0.to_string();
   }
 }
 

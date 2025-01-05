@@ -50,6 +50,18 @@ fn main() {
     .run();
 }
 
+pub trait EnableStateScopedResource {
+  fn enable_state_scoped_resource<R: Resource>(&mut self, state: impl States) -> &mut Self;
+}
+
+impl EnableStateScopedResource for App {
+  fn enable_state_scoped_resource<R: Resource>(&mut self, state: impl States) -> &mut Self {
+    self.add_systems(OnExit(state), |world: &mut World| {
+      world.remove_resource::<R>();
+    })
+  }
+}
+
 #[derive(States, Debug, Clone, PartialEq, Eq, Hash)]
 enum AppState {
   Loading,
