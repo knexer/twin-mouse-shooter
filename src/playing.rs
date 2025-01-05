@@ -1,4 +1,5 @@
-use bevy::math::primitives::RegularPolygon;
+use std::f32::consts::PI;
+
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 use rand::Rng;
@@ -33,7 +34,7 @@ impl Plugin for PlayingPlugin {
         TimerMode::Repeating,
       )))
       .insert_resource(PlayerShootTimer(Timer::from_seconds(
-        0.1,
+        0.05,
         TimerMode::Repeating,
       )))
       .add_systems(OnEnter(AppState::Playing), init_cursor_roles)
@@ -44,8 +45,10 @@ impl Plugin for PlayingPlugin {
           despawn_dead_enemies,
           move_enemies,
           enemies_damage_player,
+          display_player_health,
           despawn_dead_enemies,
           spawn_enemy,
+          display_enemy_health,
           game_over,
         )
           .chain()
@@ -54,7 +57,7 @@ impl Plugin for PlayingPlugin {
   }
 }
 
-const PLAYER_MAX_HP: i32 = 10;
+const PLAYER_MAX_HP: i32 = 30;
 
 #[derive(Component, Debug, Clone, PartialEq)]
 struct Player {
@@ -63,6 +66,11 @@ struct Player {
 
 #[derive(Component, Debug, Clone, PartialEq)]
 struct Reticle;
+
+#[derive(Component, Clone)]
+struct HealthDisplay {
+  shapes: Vec<Shape>,
+}
 
 fn init_cursor_roles(mut commands: Commands, mut cursors: Query<(Entity, &mut MouseControlled)>) {
   for (entity, mut mouse_controlled) in cursors.iter_mut() {
@@ -73,14 +81,6 @@ fn init_cursor_roles(mut commands: Commands, mut cursors: Query<(Entity, &mut Mo
           // The top portion is hollow.
           let normalized_hp = hp as f32 / PLAYER_MAX_HP as f32;
           let arc_angle = (normalized_hp * 2. - 1.).asin();
-          let top_arc = ShapePath::new()
-            .move_to(Vec2::new(arc_angle.cos(), arc_angle.sin()) * MOUSE_RADIUS)
-            .arc(
-              Vec2::ZERO,
-              Vec2::splat(MOUSE_RADIUS),
-              std::f32::consts::PI - 2. * arc_angle, // sweep angle
-              0.,
-            );
           let bottom_filled = ShapePath::new()
             .move_to(Vec2::new(arc_angle.cos(), arc_angle.sin()) * MOUSE_RADIUS)
             .arc(
@@ -91,29 +91,34 @@ fn init_cursor_roles(mut commands: Commands, mut cursors: Query<(Entity, &mut Mo
             )
             .close();
           ShapeBuilder::new()
-            .add(&top_arc)
             .add(&bottom_filled)
-            .add(
-              &ShapePath::new()
-                .move_to(Vec2::new(0., -0.05))
-                .line_to(Vec2::new(0., 0.05)),
-            )
-            .stroke(Stroke {
-              color: PLAYER_COLOR,
-              options: StrokeOptions::default()
-                .with_tolerance(0.01)
-                .with_line_width(0.1),
-            })
-            // .fill(PLAYER_COLOR)
+            .fill(PLAYER_COLOR)
             .build()
         };
-        // TODO part fill, part stroke, how do?
-        // Probably just have to do two separate entities... not too bad.
-        commands.entity(entity).insert((
-          Player { hp: PLAYER_MAX_HP },
-          shape_for_hp(PLAYER_MAX_HP - 4),
-          StateScoped(AppState::Playing),
-        ));
+        commands
+          .entity(entity)
+          .insert((
+            Player { hp: PLAYER_MAX_HP },
+            ShapeBuilder::new()
+              .add(&shapes::Circle {
+                radius: MOUSE_RADIUS,
+                center: Vec2::ZERO,
+              })
+              .stroke(Stroke {
+                color: PLAYER_COLOR,
+                options: StrokeOptions::default()
+                  .with_line_width(0.05)
+                  .with_tolerance(0.02),
+              })
+              .build(),
+            StateScoped(AppState::Playing),
+          ))
+          .with_child((
+            HealthDisplay {
+              shapes: (0..=PLAYER_MAX_HP).map(shape_for_hp).collect(),
+            },
+            shape_for_hp(PLAYER_MAX_HP),
+          ));
         mouse_controlled.physics = MouseControlConfig::WithSpeedLimit(8.);
       }
       Some(Hand::Right) => {
@@ -158,8 +163,6 @@ struct EnemySpawnTimer(Timer);
 
 fn spawn_enemy(
   mut commands: Commands,
-  mut meshes: ResMut<Assets<Mesh>>,
-  mut materials: ResMut<Assets<ColorMaterial>>,
   time: Res<Time>,
   mut timer: ResMut<EnemySpawnTimer>,
   play_area: Res<PlayArea>,
@@ -191,19 +194,53 @@ fn spawn_enemy(
   let min_speed = 1.0;
   let max_speed = 4.0;
   let max_radial_velocity = 3.0;
+  let max_hp = 10;
 
-  commands.spawn((
-    Enemy {
-      hp: 3,
-      velocity: -spawn_direction * rng.gen_range(min_speed..max_speed),
-      radial_velocity: rng.gen_range(-max_radial_velocity..max_radial_velocity),
-    },
-    Transform::from_translation(spawn_position.extend(0.0)),
-    GlobalTransform::default(),
-    Mesh2d::from(meshes.add(RegularPolygon::new(0.25, 3))),
-    MeshMaterial2d(materials.add(Color::hsl(0., 0.95, 0.7))),
-    StateScoped(AppState::Playing),
-  ));
+  let shape_for_hp = |hp: i32| -> Shape {
+    // The enemy is a triangle, filled from the bottom up in proportion to the enemy's health
+    // So, the bottom is a trapezoid.
+    let normalized_hp = hp as f32 / max_hp as f32;
+    let angle = 2. / 3. * std::f32::consts::PI;
+    let bottom_left = Vec2::from_angle(angle + PI / 2.).clamp_length_max(0.25);
+    let bottom_right = Vec2::from_angle(2. * angle + PI / 2.).clamp_length_max(0.25);
+    let top = Vec2::new(0., 1.).clamp_length_max(0.25);
+    let bottom_filled = ShapePath::new()
+      .move_to(bottom_left)
+      .line_to(bottom_left + (top - bottom_left) * normalized_hp)
+      .line_to(bottom_right + (top - bottom_right) * normalized_hp)
+      .line_to(bottom_right)
+      .close();
+    ShapeBuilder::new()
+      .add(&bottom_filled)
+      .fill(Color::hsl(0., 0.95, 0.7))
+      .build()
+  };
+
+  commands
+    .spawn((
+      Enemy {
+        hp: max_hp,
+        velocity: -spawn_direction * rng.gen_range(min_speed..max_speed),
+        radial_velocity: rng.gen_range(-max_radial_velocity..max_radial_velocity),
+      },
+      Transform::from_translation(spawn_position.extend(0.0)),
+      GlobalTransform::default(),
+      ShapeBuilder::new()
+        .add(&shapes::RegularPolygon {
+          sides: 3,
+          center: Vec2::ZERO,
+          feature: RegularPolygonFeature::Radius(0.25),
+        })
+        .stroke(Stroke::new(Color::hsl(0., 0.95, 0.7), 0.05))
+        .build(),
+      StateScoped(AppState::Playing),
+    ))
+    .with_child((
+      HealthDisplay {
+        shapes: (0..=max_hp).map(shape_for_hp).collect(),
+      },
+      shape_for_hp(max_hp),
+    ));
 }
 
 fn move_enemies(mut enemies: Query<(&mut Transform, &Enemy)>, time: Res<Time>) {
@@ -241,7 +278,7 @@ fn shoot(
 fn despawn_dead_enemies(mut commands: Commands, enemies: Query<(Entity, &Enemy)>) {
   for (entity, enemy) in enemies.iter() {
     if enemy.hp <= 0 {
-      commands.entity(entity).despawn();
+      commands.entity(entity).despawn_recursive();
     }
   }
 }
@@ -250,11 +287,47 @@ fn enemies_damage_player(
   mut player: Query<(&Transform, &mut Player)>,
   mut enemies: Query<(&Transform, &mut Enemy)>,
 ) {
+  // TODO the damage rate is a fun effect, but it's frame rate dependent
   for (enemy_transform, mut enemy) in enemies.iter_mut() {
     let (player_transform, mut player) = player.single_mut();
     if (enemy_transform.translation.xy() - player_transform.translation.xy()).length() < 0.5 {
       player.hp -= 1;
       enemy.hp -= 1;
+    }
+  }
+}
+
+fn display_player_health(
+  mut commands: Commands,
+  player: Query<(&Player, &Children)>,
+  health_displays: Query<(Entity, &HealthDisplay)>,
+) {
+  let (player, children) = player.single();
+  for child in children.iter() {
+    let Ok((entity, health_display)) = health_displays.get(*child) else {
+      continue;
+    };
+
+    commands
+      .entity(entity)
+      .insert(health_display.shapes[player.hp as usize].clone());
+  }
+}
+
+fn display_enemy_health(
+  mut commands: Commands,
+  enemies: Query<(&Enemy, &Children)>,
+  health_displays: Query<(Entity, &HealthDisplay)>,
+) {
+  for (enemy, children) in enemies.iter() {
+    for child in children.iter() {
+      let Ok((entity, health_display)) = health_displays.get(*child) else {
+        continue;
+      };
+
+      commands
+        .entity(entity)
+        .insert(health_display.shapes[enemy.hp as usize].clone());
     }
   }
 }
