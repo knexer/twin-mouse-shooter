@@ -5,8 +5,10 @@ use bevy_prototype_lyon::prelude::*;
 use rand::Rng;
 
 use crate::{
-  window_setup::PlayArea, AppState, EnableStateScopedResource, Hand, MouseControlConfig,
-  MouseControlled, MOUSE_RADIUS, PLAYER_COLOR, RETICLE_COLOR,
+  mischief::{MischiefEvent, MischiefEventData},
+  window_setup::PlayArea,
+  AppState, EnableStateScopedResource, Hand, MouseControlConfig, MouseControlled, MOUSE_RADIUS,
+  PLAYER_COLOR, RETICLE_COLOR,
 };
 
 // MVP tasks:
@@ -20,9 +22,7 @@ use crate::{
 // Scale up the enemy frequency over time (done)
 // Killed enemies should increase score (done)
 // Game over screen, show score, click to restart (done)
-
-// Enemies should shoot maybe?
-// Click to swap
+// Click to swap (done)
 
 pub struct PlayingPlugin;
 
@@ -48,6 +48,7 @@ impl Plugin for PlayingPlugin {
           update_score_display,
           spawn_enemy,
           display_enemy_health,
+          swap,
           game_over,
         )
           .chain()
@@ -269,6 +270,41 @@ fn move_enemies(mut enemies: Query<(&mut Transform, &Enemy)>, time: Res<Time>) {
 
     let rotation = Quat::from_rotation_z(enemy.radial_velocity * time.delta_secs());
     transform.rotation *= rotation;
+  }
+}
+
+fn swap(
+  mut player: Query<(&mut Transform, &mut MouseControlled), (With<Player>, Without<Reticle>)>,
+  mut reticle: Query<(&mut Transform, &mut MouseControlled), (With<Reticle>, Without<Player>)>,
+  mut mouse_events: EventReader<MischiefEvent>,
+) {
+  for MischiefEvent {
+    device: _,
+    event_data,
+  } in mouse_events.read()
+  {
+    let MischiefEventData::Button {
+      button: _,
+      pressed: true,
+    } = event_data
+    else {
+      continue;
+    };
+
+    let (mut player_transform, mut player_control) = player.single_mut();
+    let (mut reticle_transform, mut reticle_control) = reticle.single_mut();
+
+    std::mem::swap(
+      &mut player_transform.translation,
+      &mut reticle_transform.translation,
+    );
+    std::mem::swap(
+      &mut player_transform.rotation,
+      &mut reticle_transform.rotation,
+    );
+
+    std::mem::swap(&mut player_control.id, &mut reticle_control.id);
+    std::mem::swap(&mut player_control.hand, &mut reticle_control.hand);
   }
 }
 
