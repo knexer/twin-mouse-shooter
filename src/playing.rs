@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, time::Duration};
 
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
@@ -16,12 +16,12 @@ use crate::{
 // Enemies damage the player (done)
 // Player dies, game over (done)
 // Enemies should move (random direction, with spin, asteroids style) (done)
+// Show player/enemy health (fill in the sprite in proportion to health) (done)
+// Scale up the enemy frequency over time (done)
 
-// Show player/enemy health (fill in the sprite in proportion to health)
 // Killed enemies should increase score
 // Game over screen, show score, click to restart
 // Enemies should shoot maybe?
-// Scale up the enemy frequency over time
 // Click to swap
 
 pub struct PlayingPlugin;
@@ -29,15 +29,14 @@ pub struct PlayingPlugin;
 impl Plugin for PlayingPlugin {
   fn build(&self, app: &mut App) {
     app
-      .insert_resource(EnemySpawnTimer(Timer::from_seconds(
-        1.0,
-        TimerMode::Repeating,
-      )))
       .insert_resource(PlayerShootTimer(Timer::from_seconds(
         0.05,
         TimerMode::Repeating,
       )))
-      .add_systems(OnEnter(AppState::Playing), init_cursor_roles)
+      .add_systems(
+        OnEnter(AppState::Playing),
+        (init_enemy_spawn_timer, init_cursor_roles),
+      )
       .add_systems(
         Update,
         (
@@ -161,6 +160,13 @@ struct Enemy {
 #[derive(Resource)]
 struct EnemySpawnTimer(Timer);
 
+fn init_enemy_spawn_timer(mut commands: Commands) {
+  commands.insert_resource(EnemySpawnTimer(Timer::from_seconds(
+    1.0,
+    TimerMode::Repeating,
+  )));
+}
+
 fn spawn_enemy(
   mut commands: Commands,
   time: Res<Time>,
@@ -241,6 +247,15 @@ fn spawn_enemy(
       },
       shape_for_hp(max_hp),
     ));
+
+  // Spawn rate should go up linearly with time (enemies per second per second is constant)
+  // Since this runs once per enemy spawn, we multiply by seconds per enemy to get the right units.
+  let secs_per_enemy = timer.0.duration().as_secs_f32();
+  let enemies_per_sec_per_enemy = 0.05 * secs_per_enemy;
+
+  let next_enemies_per_sec = 1. / secs_per_enemy + enemies_per_sec_per_enemy;
+  let next_duration = Duration::from_secs_f32(1. / next_enemies_per_sec);
+  timer.0.set_duration(next_duration);
 }
 
 fn move_enemies(mut enemies: Query<(&mut Transform, &Enemy)>, time: Res<Time>) {
