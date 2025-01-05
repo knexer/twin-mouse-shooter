@@ -1,5 +1,3 @@
-use cc;
-
 fn main() {
   cc::Build::new()
     .flag("-Wno-unused-parameter") // Suppress unused parameter warnings

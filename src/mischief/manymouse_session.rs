@@ -74,13 +74,13 @@ pub struct InputDevice {
 
 impl Default for ManyMouseEvent {
   fn default() -> Self {
-    return ManyMouseEvent {
+    ManyMouseEvent {
       type_: bindings::ManyMouseEventType_MANYMOUSE_EVENT_ABSMOTION,
       device: 0,
       item: 0,
       value: 0,
       minval: 0,
       maxval: 0,
-    };
+    }
   }
 }

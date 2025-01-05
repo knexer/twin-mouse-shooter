@@ -35,7 +35,7 @@ impl Path {
     num_segments: u32,
     direction: WindDirection,
   ) {
-    let start_pos = self.vertices.last().unwrap().clone();
+    let start_pos = self.vertices.last().unwrap();
     let radius = (start_pos - arc_center).length();
     let start_angle = f32::atan2(start_pos.y - arc_center.y, start_pos.x - arc_center.x);
     let end_angle = f32::atan2(end_pos.y - arc_center.y, end_pos.x - arc_center.x);
@@ -101,7 +101,7 @@ impl Path {
         .collect::<Vec<_>>(),
     );
 
-    return mesh;
+    mesh
   }
 
   pub fn build_triangle_mesh(&self) -> Mesh {
@@ -169,7 +169,7 @@ impl Path {
       );
     }
 
-    return triangles;
+    triangles
   }
 }
 
@@ -195,11 +195,11 @@ fn is_ear(path: &Path, ear: usize, prev: usize, next: usize) -> bool {
     }
   }
 
-  return true;
+  true
 }
 
 fn sign(p1: Vec2, p2: Vec2, p3: Vec2) -> f32 {
-  return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
+  (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y)
 }
 
 fn is_point_in_triangle(point: Vec2, a: Vec2, b: Vec2, c: Vec2) -> bool {
@@ -224,5 +224,5 @@ fn is_point_in_triangle(point: Vec2, a: Vec2, b: Vec2, c: Vec2) -> bool {
 
   // If we're here, we know the point is collinear with all three edges.
   // For now, just return false.
-  return false;
+  false
 }

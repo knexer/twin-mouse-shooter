@@ -43,9 +43,9 @@ pub struct PlayArea {
 
 fn size_window(mut windows: Query<&mut Window>) {
   let mut window = windows.single_mut();
-  let scale_factor = window.scale_factor() as f32;
+  let scale_factor = window.scale_factor();
   window.resolution = WindowResolution::new(1600.0 * scale_factor, 900.0 * scale_factor)
-    .with_scale_factor_override(scale_factor as f32);
+    .with_scale_factor_override(scale_factor);
   window.position.center(MonitorSelection::Current);
 }
 

@@ -64,12 +64,7 @@ struct Player {
 #[derive(Component, Debug, Clone, PartialEq)]
 struct Reticle;
 
-fn init_cursor_roles(
-  mut commands: Commands,
-  mut cursors: Query<(Entity, &mut MouseControlled)>,
-  mut meshes: ResMut<Assets<Mesh>>,
-  mut materials: ResMut<Assets<ColorMaterial>>,
-) {
+fn init_cursor_roles(mut commands: Commands, mut cursors: Query<(Entity, &mut MouseControlled)>) {
   for (entity, mut mouse_controlled) in cursors.iter_mut() {
     match mouse_controlled.hand {
       Some(Hand::Left) => {
@@ -141,12 +136,9 @@ fn init_cursor_roles(
           .stroke(Stroke::new(RETICLE_COLOR, 0.1))
           .build();
 
-        commands.entity(entity).insert((
-          Reticle,
-          shape,
-          MeshMaterial2d(materials.add(RETICLE_COLOR)),
-          StateScoped(AppState::Playing),
-        ));
+        commands
+          .entity(entity)
+          .insert((Reticle, shape, StateScoped(AppState::Playing)));
         mouse_controlled.physics = MouseControlConfig::Direct;
       }
       None => {}
