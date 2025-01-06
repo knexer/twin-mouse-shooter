@@ -11,7 +11,7 @@ impl Plugin for GameOverPlugin {
   fn build(&self, app: &mut App) {
     app
       .add_systems(OnEnter(AppState::GameOver), spawn_game_over_text)
-      .add_systems(Update, start_new_game);
+      .add_systems(Update, start_new_game.run_if(in_state(AppState::GameOver)));
   }
 }
 
