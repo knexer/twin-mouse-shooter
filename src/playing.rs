@@ -5,10 +5,8 @@ use bevy_prototype_lyon::prelude::*;
 use rand::Rng;
 
 use crate::{
-  mischief::{MischiefEvent, MischiefEventData},
-  window_setup::PlayArea,
-  AppState, EnableStateScopedResource, Hand, MouseControlConfig, MouseControlled, MOUSE_RADIUS,
-  PLAYER_COLOR, RETICLE_COLOR,
+  window_setup::PlayArea, AppState, EnableStateScopedResource, Hand, MouseControlConfig,
+  MouseControlled, MOUSE_RADIUS, PLAYER_COLOR, RETICLE_COLOR,
 };
 
 // MVP tasks:
@@ -30,7 +28,6 @@ impl Plugin for PlayingPlugin {
   fn build(&self, app: &mut App) {
     app
       .enable_state_scoped_resource::<EnemySpawnTimer>(AppState::Playing)
-      .enable_state_scoped_resource::<PlayerShootTimer>(AppState::Playing)
       .enable_state_scoped_resource::<Score>(AppState::GameOver)
       .add_systems(
         OnEnter(AppState::Playing),
@@ -39,39 +36,47 @@ impl Plugin for PlayingPlugin {
       .add_systems(
         Update,
         (
-          shoot,
-          despawn_dead_enemies,
-          move_enemies,
-          enemies_damage_player,
-          display_player_health,
+          move_enemies.in_set(MovesStuffSet),
+          (contact_damage, damage_enemies_in_area).in_set(ApplyDamageSet),
+          (display_player_health, display_enemy_health).after(ApplyDamageSet),
           despawn_dead_enemies,
           update_score_display,
           spawn_enemy,
-          display_enemy_health,
-          swap,
           game_over,
         )
           .chain()
           .run_if(in_state(AppState::Playing)),
-      );
+      )
+      .configure_sets(Update, ApplyDamageSet.after(MovesStuffSet));
   }
 }
 
 const PLAYER_MAX_HP: i32 = 30;
 
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ApplyDamageSet;
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MovesStuffSet;
+
 #[derive(Component, Debug, Clone, PartialEq)]
-struct Player {
-  hp: i32,
+pub struct Player {
+  pub hp: i32,
 }
 
 #[derive(Component, Debug, Clone, PartialEq)]
-struct Reticle;
+pub struct Reticle;
 
 #[derive(Component, Clone)]
 struct HealthDisplay {
   shapes: Vec<Shape>,
 }
 
+// TODO: crash on respawn if hands are swapped
+// If not swapped, this just replaces the existing player/reticle components
+// With the swap, this puts a player component on the reticle and a reticle component on the player
+// Should maybe... not do that lol
+// Either make some of this state-scoped, or be more careful about what gets replaced
 fn init_cursor_roles(mut commands: Commands, mut cursors: Query<(Entity, &mut MouseControlled)>) {
   for (entity, mut mouse_controlled) in cursors.iter_mut() {
     match mouse_controlled.hand {
@@ -149,8 +154,8 @@ fn init_cursor_roles(mut commands: Commands, mut cursors: Query<(Entity, &mut Mo
 }
 
 #[derive(Component, Debug, Clone, PartialEq)]
-struct Enemy {
-  hp: i32,
+pub struct Enemy {
+  pub hp: i32,
   velocity: Vec2,
   radial_velocity: f32,
 }
@@ -164,10 +169,6 @@ struct Score(i32);
 fn init_resources(mut commands: Commands) {
   commands.insert_resource(EnemySpawnTimer(Timer::from_seconds(
     1.0,
-    TimerMode::Repeating,
-  )));
-  commands.insert_resource(PlayerShootTimer(Timer::from_seconds(
-    0.05,
     TimerMode::Repeating,
   )));
   commands.insert_resource(Score(0));
@@ -273,61 +274,31 @@ fn move_enemies(mut enemies: Query<(&mut Transform, &Enemy)>, time: Res<Time>) {
   }
 }
 
-fn swap(
-  mut player: Query<(&mut Transform, &mut MouseControlled), (With<Player>, Without<Reticle>)>,
-  mut reticle: Query<(&mut Transform, &mut MouseControlled), (With<Reticle>, Without<Player>)>,
-  mut mouse_events: EventReader<MischiefEvent>,
-) {
-  for MischiefEvent {
-    device: _,
-    event_data,
-  } in mouse_events.read()
-  {
-    let MischiefEventData::Button {
-      button: _,
-      pressed: true,
-    } = event_data
-    else {
-      continue;
-    };
-
-    let (mut player_transform, mut player_control) = player.single_mut();
-    let (mut reticle_transform, mut reticle_control) = reticle.single_mut();
-
-    std::mem::swap(
-      &mut player_transform.translation,
-      &mut reticle_transform.translation,
-    );
-    std::mem::swap(
-      &mut player_transform.rotation,
-      &mut reticle_transform.rotation,
-    );
-
-    std::mem::swap(&mut player_control.id, &mut reticle_control.id);
-    std::mem::swap(&mut player_control.hand, &mut reticle_control.hand);
-  }
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct DamageArea {
+  pub damage: u32,
+  pub half_size: Vec2,
 }
 
-#[derive(Resource)]
-struct PlayerShootTimer(Timer);
-
-fn shoot(
-  player: Query<&Transform, With<Reticle>>,
+fn damage_enemies_in_area(
+  mut commands: Commands,
+  damage_areas: Query<(Entity, &Transform, &DamageArea)>,
   mut enemies: Query<(&Transform, &mut Enemy)>,
-  time: Res<Time>,
-  mut timer: ResMut<PlayerShootTimer>,
 ) {
-  if !timer.0.tick(time.delta()).just_finished() {
-    return;
-  }
+  for (entity, area_transform, area) in damage_areas.iter() {
+    let world_to_area = area_transform.compute_matrix().inverse();
+    for (enemy_transform, mut enemy) in enemies.iter_mut() {
+      let enemy_pos_in_area = world_to_area.transform_point3(enemy_transform.translation);
 
-  let player_position = player.single().translation;
-
-  for (enemy_transform, mut enemy) in enemies.iter_mut() {
-    // TODO maybe check for collision more better?
-    if (enemy_transform.translation.xy() - player_position.xy()).length() < 0.5 {
-      enemy.hp -= 1;
+      if enemy_pos_in_area.x > -area.half_size.x
+        && enemy_pos_in_area.x < area.half_size.x
+        && enemy_pos_in_area.y > -area.half_size.y
+        && enemy_pos_in_area.y < area.half_size.y
+      {
+        enemy.hp = (enemy.hp - area.damage as i32).max(0);
+      }
     }
+    commands.entity(entity).despawn_recursive();
   }
 }
 
@@ -344,7 +315,7 @@ fn despawn_dead_enemies(
   }
 }
 
-fn enemies_damage_player(
+fn contact_damage(
   mut player: Query<(&Transform, &mut Player)>,
   mut enemies: Query<(&Transform, &mut Enemy)>,
 ) {
