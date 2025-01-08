@@ -31,7 +31,7 @@ impl Plugin for PlayingPlugin {
       .enable_state_scoped_resource::<Score>(AppState::GameOver)
       .add_systems(
         OnEnter(AppState::Playing),
-        (init_resources, init_cursor_roles, spawn_score_display),
+        (init_resources, spawn_or_respawn_player, spawn_score_display),
       )
       .add_systems(
         Update,
@@ -72,12 +72,17 @@ struct HealthDisplay {
   shapes: Vec<Shape>,
 }
 
-// TODO: crash on respawn if hands are swapped
-// If not swapped, this just replaces the existing player/reticle components
-// With the swap, this puts a player component on the reticle and a reticle component on the player
-// Should maybe... not do that lol
-// Either make some of this state-scoped, or be more careful about what gets replaced
-fn init_cursor_roles(mut commands: Commands, mut cursors: Query<(Entity, &mut MouseControlled)>) {
+fn spawn_or_respawn_player(
+  mut commands: Commands,
+  mut cursors: Query<(Entity, &mut MouseControlled), (Without<Reticle>, Without<Player>)>,
+  mut player: Query<&mut Player>,
+) {
+  // Respawn case
+  for mut player in player.iter_mut() {
+    player.hp = PLAYER_MAX_HP;
+  }
+
+  // First spawn case
   for (entity, mut mouse_controlled) in cursors.iter_mut() {
     match mouse_controlled.hand {
       Some(Hand::Left) => {
