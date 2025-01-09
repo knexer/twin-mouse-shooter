@@ -5,8 +5,8 @@ use bevy_prototype_lyon::prelude::*;
 use rand::Rng;
 
 use crate::{
-  window_setup::PlayArea, AppState, EnableStateScopedResource, Hand, MouseControlConfig,
-  MouseControlled, MOUSE_RADIUS, PLAYER_COLOR, RETICLE_COLOR,
+  damage::ApplyDamageSet, window_setup::PlayArea, AppState, EnableStateScopedResource, Hand,
+  MouseControlConfig, MouseControlled, MOUSE_RADIUS, PLAYER_COLOR, RETICLE_COLOR,
 };
 
 // MVP tasks:
@@ -37,7 +37,6 @@ impl Plugin for PlayingPlugin {
         Update,
         (
           move_enemies.in_set(MovesStuffSet),
-          (contact_damage, damage_enemies_in_area).in_set(ApplyDamageSet),
           (display_player_health, display_enemy_health).after(ApplyDamageSet),
           despawn_dead_enemies,
           update_score_display,
@@ -52,9 +51,6 @@ impl Plugin for PlayingPlugin {
 }
 
 const PLAYER_MAX_HP: u32 = 30;
-
-#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ApplyDamageSet;
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MovesStuffSet;
@@ -279,34 +275,6 @@ fn move_enemies(mut enemies: Query<(&mut Transform, &Enemy)>, time: Res<Time>) {
   }
 }
 
-#[derive(Component, Debug, Clone, PartialEq)]
-pub struct DamageArea {
-  pub damage: u32,
-  pub half_size: Vec2,
-}
-
-fn damage_enemies_in_area(
-  mut commands: Commands,
-  damage_areas: Query<(Entity, &Transform, &DamageArea)>,
-  mut enemies: Query<(&Transform, &mut Enemy)>,
-) {
-  for (entity, area_transform, area) in damage_areas.iter() {
-    let world_to_area = area_transform.compute_matrix().inverse();
-    for (enemy_transform, mut enemy) in enemies.iter_mut() {
-      let enemy_pos_in_area = world_to_area.transform_point3(enemy_transform.translation);
-
-      if enemy_pos_in_area.x > -area.half_size.x
-        && enemy_pos_in_area.x < area.half_size.x
-        && enemy_pos_in_area.y > -area.half_size.y
-        && enemy_pos_in_area.y < area.half_size.y
-      {
-        enemy.hp = enemy.hp.saturating_sub(area.damage);
-      }
-    }
-    commands.entity(entity).despawn_recursive();
-  }
-}
-
 fn despawn_dead_enemies(
   mut commands: Commands,
   enemies: Query<(Entity, &Enemy)>,
@@ -316,20 +284,6 @@ fn despawn_dead_enemies(
     if enemy.hp == 0 {
       commands.entity(entity).despawn_recursive();
       score.0 += 1;
-    }
-  }
-}
-
-fn contact_damage(
-  mut player: Query<(&Transform, &mut Player)>,
-  mut enemies: Query<(&Transform, &mut Enemy)>,
-) {
-  // TODO the damage rate is a fun effect, but it's frame rate dependent
-  for (enemy_transform, mut enemy) in enemies.iter_mut() {
-    let (player_transform, mut player) = player.single_mut();
-    if (enemy_transform.translation.xy() - player_transform.translation.xy()).length() < 0.5 {
-      player.hp = player.hp.saturating_sub(1);
-      enemy.hp -= 1;
     }
   }
 }

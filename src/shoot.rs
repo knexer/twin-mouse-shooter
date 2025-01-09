@@ -1,8 +1,9 @@
 use bevy::prelude::*;
 
 use crate::{
+  damage::{ApplyDamageSet, DamageArea},
   mischief::{MischiefEvent, MischiefEventData},
-  playing::{ApplyDamageSet, DamageArea, MovesStuffSet, Player, Reticle},
+  playing::{MovesStuffSet, Player, Reticle},
   AppState, EnableStateScopedResource, MouseControlled,
 };
 

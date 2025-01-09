@@ -5,7 +5,8 @@ use bevy_prototype_lyon::{
 };
 
 use crate::{
-  playing::{DamageArea, MovesStuffSet, Player, Reticle},
+  damage::DamageArea,
+  playing::{MovesStuffSet, Player, Reticle},
   AppState, MouseControlled,
 };
 
@@ -74,12 +75,5 @@ fn dash_swap(
       damage: 10,
       half_size: Vec2::new(half_width, half_height),
     },
-    ShapeBuilder::new()
-      .add(&shapes::Rectangle {
-        extents: Vec2::new(half_width * 2., half_height * 2.),
-        ..default()
-      })
-      .fill(Color::WHITE)
-      .build(),
   ));
 }
