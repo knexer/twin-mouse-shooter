@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use bevy::{input::common_conditions::input_toggle_active, prelude::*};
 use bevy_prototype_lyon::plugin::ShapePlugin;
+use bomb_surprise::BombSurprisePlugin;
 use dash_swap::DashSwapPlugin;
 use game_over::GameOverPlugin;
 use intro::IntroPlugin;
@@ -10,6 +11,7 @@ use playing::{MovesStuffSet, PlayingPlugin};
 use shoot::ShootPlugin;
 use window_setup::{PlayArea, WindowSetupPlugin};
 
+mod bomb_surprise;
 mod dash_swap;
 mod game_over;
 mod intro;
@@ -44,7 +46,8 @@ fn main() {
     .add_plugins(IntroPlugin)
     .add_plugins(PlayingPlugin)
     // .add_plugins(ShootPlugin)
-    .add_plugins(DashSwapPlugin)
+    // .add_plugins(DashSwapPlugin)
+    .add_plugins(BombSurprisePlugin)
     .add_plugins(GameOverPlugin)
     .insert_state(AppState::Loading)
     .enable_state_scoped_entities::<AppState>()
