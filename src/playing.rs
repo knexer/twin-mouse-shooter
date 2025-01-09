@@ -51,7 +51,7 @@ impl Plugin for PlayingPlugin {
   }
 }
 
-const PLAYER_MAX_HP: i32 = 30;
+const PLAYER_MAX_HP: u32 = 30;
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ApplyDamageSet;
@@ -61,7 +61,7 @@ pub struct MovesStuffSet;
 
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct Player {
-  pub hp: i32,
+  pub hp: u32,
 }
 
 #[derive(Component, Debug, Clone, PartialEq)]
@@ -86,7 +86,7 @@ fn spawn_or_respawn_player(
   for (entity, mut mouse_controlled) in cursors.iter_mut() {
     match mouse_controlled.hand {
       Some(Hand::Left) => {
-        let shape_for_hp = |hp: i32| -> Shape {
+        let shape_for_hp = |hp: u32| -> Shape {
           // Create a circle, filled from the bottom up in proportion to the player's health
           // The top portion is hollow.
           let normalized_hp = hp as f32 / PLAYER_MAX_HP as f32;
@@ -160,7 +160,7 @@ fn spawn_or_respawn_player(
 
 #[derive(Component, Debug, Clone, PartialEq)]
 pub struct Enemy {
-  pub hp: i32,
+  pub hp: u32,
   velocity: Vec2,
   radial_velocity: f32,
 }
@@ -214,7 +214,7 @@ fn spawn_enemy(
   let max_radial_velocity = 3.0;
   let max_hp = 10;
 
-  let shape_for_hp = |hp: i32| -> Shape {
+  let shape_for_hp = |hp: u32| -> Shape {
     // The enemy is a triangle, filled from the bottom up in proportion to the enemy's health
     // So, the bottom is a trapezoid.
     let normalized_hp = hp as f32 / max_hp as f32;
@@ -300,7 +300,7 @@ fn damage_enemies_in_area(
         && enemy_pos_in_area.y > -area.half_size.y
         && enemy_pos_in_area.y < area.half_size.y
       {
-        enemy.hp = (enemy.hp - area.damage as i32).max(0);
+        enemy.hp = enemy.hp.saturating_sub(area.damage);
       }
     }
     commands.entity(entity).despawn_recursive();
@@ -313,7 +313,7 @@ fn despawn_dead_enemies(
   mut score: ResMut<Score>,
 ) {
   for (entity, enemy) in enemies.iter() {
-    if enemy.hp <= 0 {
+    if enemy.hp == 0 {
       commands.entity(entity).despawn_recursive();
       score.0 += 1;
     }
@@ -328,7 +328,7 @@ fn contact_damage(
   for (enemy_transform, mut enemy) in enemies.iter_mut() {
     let (player_transform, mut player) = player.single_mut();
     if (enemy_transform.translation.xy() - player_transform.translation.xy()).length() < 0.5 {
-      player.hp -= 1;
+      player.hp = player.hp.saturating_sub(1);
       enemy.hp -= 1;
     }
   }
@@ -407,7 +407,7 @@ fn update_score_display(score: Res<Score>, mut text: Query<&mut TextSpan, With<S
 fn game_over(player: Query<&Player>, mut next_state: ResMut<NextState<AppState>>) {
   let player = player.single();
 
-  if player.hp <= 0 {
+  if player.hp == 0 {
     next_state.set(AppState::GameOver);
   }
 }
